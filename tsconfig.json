@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "allowJs": false,
+    "checkJs": false,
+    "jsx": "react",
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "node",
+    "noImplicitAny": false,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "noUnusedLocals": true,
+    "outDir": "build/dist",
+    "sourceMap": true,
+    "strictNullChecks": true,
+    "suppressImplicitAnyIndexErrors": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      // Map all modules to their source
+      "@kepler.gl/*": ["src/*/src"]
+    }
+  },
+  "include": ["src"],
+
+  "exclude": [
+    "src/deckgl-layers/cluster-layer",
+
+    // build files
+    "src/**/dist/**",
+    "node_modules"
+  ]
+}
