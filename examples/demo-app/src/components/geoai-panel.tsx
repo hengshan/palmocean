@@ -207,7 +207,6 @@ const QUICK_TARGETS: Record<string, Array<{id: string; label: string}>> = {
 // ─── Panel Content Component ─────────────────────────────────
 
 const GeoAiPanelContent = () => {
-  const [aoiMode, setAoiMode] = useState<string | null>(null);
   const [taskCategory, setTaskCategory] = useState<string | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [customTarget, setCustomTarget] = useState('');
@@ -215,31 +214,7 @@ const GeoAiPanelContent = () => {
 
   return (
     <StyledGeoAIPanel>
-      {/* 1. AOI Selection */}
-      <StyledSection>
-        <StyledSectionTitle>📍 Area of Interest</StyledSectionTitle>
-        <ButtonRow>
-          <StyledButton
-            active={aoiMode === 'rectangle'}
-            onClick={() => setAoiMode(aoiMode === 'rectangle' ? null : 'rectangle')}
-          >
-            ▭ Rectangle
-          </StyledButton>
-          <StyledButton
-            active={aoiMode === 'polygon'}
-            onClick={() => setAoiMode(aoiMode === 'polygon' ? null : 'polygon')}
-          >
-            ⬠ Polygon
-          </StyledButton>
-        </ButtonRow>
-        {aoiMode && (
-          <EmptyState style={{marginTop: 6}}>
-            Draw {aoiMode} on map to select area...
-          </EmptyState>
-        )}
-      </StyledSection>
-
-      {/* 2. Task Selection — by function category */}
+      {/* 1. Task Selection — by function category */}
       <StyledSection>
         <StyledSectionTitle>🧠 Analysis Task</StyledSectionTitle>
         <ButtonRow>
