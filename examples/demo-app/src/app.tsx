@@ -47,10 +47,14 @@ import {
 import {CLOUD_PROVIDERS} from './cloud-providers';
 import {Panel, PanelGroup, PanelResizeHandle} from 'react-resizable-panels';
 
+import GeoAiCustomPanelsFactory from './components/geoai-panel';
+
+const {CustomPanelsFactory} = require('@kepler.gl/components');
 const KeplerGl = require('@kepler.gl/components').injectComponents([
   replaceLoadDataModal(),
   replaceMapControl(),
-  replacePanelHeader()
+  replacePanelHeader(),
+  [CustomPanelsFactory, GeoAiCustomPanelsFactory]
 ]);
 
 // Sample data
