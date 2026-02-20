@@ -1,0 +1,37 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: palmview-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: palmview
+      POSTGRES_USER: palmview
+      POSTGRES_PASSWORD: RlICGo8ARMyYFc2FLQva
+    ports:
+      - "5434:5432"
+    volumes:
+      - palmview_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U palmview"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio
+    container_name: palmview-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: palmview
+      MINIO_ROOT_PASSWORD: RlICGo8ARMyYFc2FLQva
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - palmview_minio:/data
+    command: server /data --console-address ":9001"
+
+volumes:
+  palmview_pgdata:
+  palmview_minio:
