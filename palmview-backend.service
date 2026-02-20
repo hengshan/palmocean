@@ -1,0 +1,18 @@
+[Unit]
+Description=PalmView Backend API
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=hank
+WorkingDirectory=/home/hank/projects/palmview/backend
+Environment=PATH=/home/hank/projects/palmview/backend/.venv/bin:/home/hank/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/hank/projects/palmview/backend/.venv/bin/uvicorn app.main_v1:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/palmview-backend.log
+StandardError=append:/var/log/palmview-backend.log
+
+[Install]
+WantedBy=multi-user.target
