@@ -1,0 +1,8 @@
+storage/.jwt_secret
+storage/
+credentials/
+.env
+.venv/
+uv.lock
+__pycache__/
+*.pyc
