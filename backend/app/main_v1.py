@@ -13,6 +13,7 @@ from app.api.v1 import map_configs as map_configs_v1
 from app.api.v1 import projects as projects_v1
 from app.api.v1 import assets as assets_v1
 from app.api.v1 import auth as auth_v1
+from app.api.v1 import data as data_v1
 from app.database import init_db
 
 
@@ -49,6 +50,7 @@ app.include_router(map_configs_v1.router)
 app.include_router(projects_v1.router)
 app.include_router(assets_v1.router)
 app.include_router(auth_v1.router)
+app.include_router(data_v1.router)
 
 
 @app.get("/api/health")

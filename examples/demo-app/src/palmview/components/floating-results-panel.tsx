@@ -269,14 +269,26 @@ export const FloatingResultsPanel: React.FC<FloatingResultsPanelProps> = ({
   const {pos, onMouseDown} = useDrag({x: 16, y: 16});
   const [size] = useState<Size>({width: 380, height: 320});
 
-  // Find map container for portal
+  // Find map container for portal — re-check when visibility changes
   const [container, setContainer] = useState<Element | null>(null);
   useEffect(() => {
-    const el = document.querySelector('.kepler-gl .map-container') ||
-               document.querySelector('.kepler-gl__overlay') ||
-               document.querySelector('[class*="map-container"]');
-    setContainer(el);
-  }, []);
+    if (!isVisible) return;
+    // Retry a few times in case map hasn't rendered yet
+    let attempts = 0;
+    const find = () => {
+      const el = document.querySelector('.kepler-gl .map-container') ||
+                 document.querySelector('.kepler-gl__overlay') ||
+                 document.querySelector('[class*="map-container"]') ||
+                 document.body;
+      if (el) {
+        setContainer(el);
+      } else if (attempts < 10) {
+        attempts++;
+        setTimeout(find, 200);
+      }
+    };
+    find();
+  }, [isVisible]);
 
   if (!isVisible || !job || !container) return null;
 
@@ -320,25 +332,29 @@ export const FloatingResultsPanel: React.FC<FloatingResultsPanelProps> = ({
           {/* Progress bar (while running) */}
           {isRunning && <StyledProgressBar $pct={job.progress} />}
 
-          {/* Stats (when complete) */}
-          {isComplete && stats && (
+          {/* Running status message */}
+          {isRunning && (
             <StyledStatRow>
-              {stats.total_detections != null && (
-                <StyledStatCard>
-                  <StyledStatValue>{stats.total_detections.toLocaleString()}</StyledStatValue>
-                  <StyledStatLabel>detections</StyledStatLabel>
+              <StyledStatCard>
+                <StyledStatValue>🔄</StyledStatValue>
+                <StyledStatLabel>Analyzing tiles...</StyledStatLabel>
+              </StyledStatCard>
+            </StyledStatRow>
+          )}
+
+          {/* Stats (when complete) */}
+          {isComplete && (
+            <StyledStatRow>
+              {stats && Object.entries(stats).map(([key, val]) => (
+                <StyledStatCard key={key}>
+                  <StyledStatValue>{typeof val === 'number' ? val.toLocaleString() : String(val)}</StyledStatValue>
+                  <StyledStatLabel>{key.replace(/_/g, ' ')}</StyledStatLabel>
                 </StyledStatCard>
-              )}
-              {stats.area_ha != null && (
+              ))}
+              {(!stats || Object.keys(stats).length === 0) && (
                 <StyledStatCard>
-                  <StyledStatValue>{stats.area_ha.toFixed(1)}</StyledStatValue>
-                  <StyledStatLabel>hectares</StyledStatLabel>
-                </StyledStatCard>
-              )}
-              {stats.alerts != null && (
-                <StyledStatCard>
-                  <StyledStatValue>{stats.alerts}</StyledStatValue>
-                  <StyledStatLabel>alerts</StyledStatLabel>
+                  <StyledStatValue>✓</StyledStatValue>
+                  <StyledStatLabel>Analysis complete</StyledStatLabel>
                 </StyledStatCard>
               )}
             </StyledStatRow>

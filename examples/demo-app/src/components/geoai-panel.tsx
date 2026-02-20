@@ -1,17 +1,15 @@
 // GeoAI Panel — CustomPanelsFactory replacement for PalmView
-// V4: Unified palmview module + floating results panel + WebSocket
-// Theme: Synga brand colors (#1FBF6E accent, #0A3D2E primary, #0D1117 dark)
+// V5: Inline progress, auto-add results to map, clean UX
 import React, {useState, useEffect, useCallback, useRef} from 'react';
 import styled from 'styled-components';
 import {
   submitInferenceJob,
   listInferenceJobs,
   connectInferenceStream,
+  listProjects,
   createProject,
-  FloatingResultsPanel,
   type InferenceJobDetail,
   type InferenceJobSubmit,
-  type InferenceOutputItem,
   type WSInferenceMessage,
 } from '../palmview';
 
@@ -45,27 +43,15 @@ const StyledSectionTitle = styled.div`
 
 const StyledButton = styled.button<{active?: boolean}>`
   background: ${(props: any) =>
-    props.active
-      ? props.theme?.activeColor || '#6CBFB7'
-      : props.theme?.panelBackground || 'rgba(255,255,255,0.06)'};
-  color: ${(props: any) =>
-    props.active
-      ? '#fff'
-      : props.theme?.textColor || '#A0A7B4'};
-  border: 1px solid ${(props: any) =>
-    props.active
-      ? 'transparent'
-      : props.theme?.borderColor || 'rgba(255,255,255,0.1)'};
+    props.active ? props.theme?.activeColor || '#6CBFB7' : props.theme?.panelBackground || 'rgba(255,255,255,0.06)'};
+  color: ${(props: any) => props.active ? '#fff' : props.theme?.textColor || '#A0A7B4'};
+  border: 1px solid ${(props: any) => props.active ? 'transparent' : props.theme?.borderColor || 'rgba(255,255,255,0.1)'};
   border-radius: 4px;
   padding: 6px 10px;
   font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
-
-  &:hover {
-    background: ${(props: any) => props.theme?.activeColor || '#6CBFB7'};
-    color: #fff;
-  }
+  &:hover { background: ${(props: any) => props.theme?.activeColor || '#6CBFB7'}; color: #fff; }
 `;
 
 const ButtonRow = styled.div`
@@ -84,14 +70,8 @@ const StyledInput = styled.input`
   font-size: 12px;
   outline: none;
   margin-top: 6px;
-
-  &::placeholder {
-    color: ${(props: any) => props.theme?.subtextColor || '#6A7485'};
-  }
-
-  &:focus {
-    border-color: ${(props: any) => props.theme?.activeColor || '#6CBFB7'};
-  }
+  &::placeholder { color: ${(props: any) => props.theme?.subtextColor || '#6A7485'}; }
+  &:focus { border-color: ${(props: any) => props.theme?.activeColor || '#6CBFB7'}; }
 `;
 
 const ChipRow = styled.div`
@@ -102,22 +82,15 @@ const ChipRow = styled.div`
 `;
 
 const Chip = styled.button<{selected?: boolean}>`
-  background: ${(props: any) =>
-    props.selected
-      ? props.theme?.activeColor || '#6CBFB7'
-      : 'transparent'};
-  color: ${(props: any) =>
-    props.selected ? '#fff' : props.theme?.textColor || '#A0A7B4'};
+  background: ${(props: any) => props.selected ? props.theme?.activeColor || '#6CBFB7' : 'transparent'};
+  color: ${(props: any) => props.selected ? '#fff' : props.theme?.textColor || '#A0A7B4'};
   border: 1px solid ${(props: any) => props.theme?.borderColor || 'rgba(255,255,255,0.15)'};
   border-radius: 12px;
   padding: 3px 10px;
   font-size: 10px;
   cursor: pointer;
   transition: all 0.15s;
-
-  &:hover {
-    border-color: ${(props: any) => props.theme?.activeColor || '#6CBFB7'};
-  }
+  &:hover { border-color: ${(props: any) => props.theme?.activeColor || '#6CBFB7'}; }
 `;
 
 const CollapsibleHeader = styled.div`
@@ -163,15 +136,17 @@ const RunButton = styled.button`
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.15s;
+  &:hover { opacity: 0.85; }
+  &:disabled { opacity: 0.4; cursor: not-allowed; }
+`;
 
-  &:hover {
-    opacity: 0.85;
-  }
-
-  &:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
+const RunButtonProgress = styled.div`
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: ${(props: any) => props.theme?.activeColor || '#6CBFB7'};
+  transition: width 0.3s ease-out;
 `;
 
 const EmptyState = styled.p`
@@ -179,6 +154,16 @@ const EmptyState = styled.p`
   font-size: 11px;
   margin: 0;
   font-style: italic;
+`;
+
+const ErrorMessage = styled.div`
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(249, 4, 44, 0.1);
+  border: 1px solid rgba(249, 4, 44, 0.3);
+  border-radius: 4px;
+  color: #F9042C;
+  font-size: 11px;
 `;
 
 // ─── Constants ───────────────────────────────────────────────
@@ -192,25 +177,19 @@ const TASK_CATEGORIES = [
 
 const QUICK_TARGETS: Record<string, Array<{id: string; label: string}>> = {
   detection: [
-    {id: 'palm', label: '🌴 Palm'},
-    {id: 'tree', label: '🌳 Tree'},
-    {id: 'building', label: '🏠 Building'},
-    {id: 'vehicle', label: '🚗 Vehicle'}
+    {id: 'palm', label: '🌴 Palm'}, {id: 'tree', label: '🌳 Tree'},
+    {id: 'building', label: '🏠 Building'}, {id: 'vehicle', label: '🚗 Vehicle'}
   ],
   segmentation: [
-    {id: 'vegetation', label: '🌿 Vegetation'},
-    {id: 'water', label: '💧 Water'},
-    {id: 'urban', label: '🏙️ Urban'},
-    {id: 'agriculture', label: '🌾 Agriculture'}
+    {id: 'vegetation', label: '🌿 Vegetation'}, {id: 'water', label: '💧 Water'},
+    {id: 'urban', label: '🏙️ Urban'}, {id: 'agriculture', label: '🌾 Agriculture'}
   ],
   classification: [
-    {id: 'lulc5', label: 'LULC 5-class'},
-    {id: 'lulc10', label: 'LULC 10-class'},
+    {id: 'lulc5', label: 'LULC 5-class'}, {id: 'lulc10', label: 'LULC 10-class'},
     {id: 'custom', label: '✏️ Custom'}
   ],
   change: [
-    {id: 'deforestation', label: '🌲→🏜️ Deforestation'},
-    {id: 'urbanization', label: '🌿→🏙️ Urbanization'},
+    {id: 'deforestation', label: '🌲→🏜️ Deforestation'}, {id: 'urbanization', label: '🌿→🏙️ Urbanization'},
     {id: 'custom', label: '✏️ Custom'}
   ]
 };
@@ -222,89 +201,59 @@ const GeoAiPanelContent = () => {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [customTarget, setCustomTarget] = useState('');
   const [modelConfigOpen, setModelConfigOpen] = useState(false);
+
+  // Job state — inline
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [activeJob, setActiveJob] = useState<{
+    job_id: string;
+    status: string;
+    progress: number;
+  } | null>(null);
+
+  // History
   const [jobHistory, setJobHistory] = useState<InferenceJobDetail[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Floating results panel state
-  const [activeJob, setActiveJob] = useState<InferenceJobDetail | null>(null);
-  const [activeOutputs, setActiveOutputs] = useState<InferenceOutputItem[]>([]);
-  const [showResults, setShowResults] = useState(false);
-  const [confidenceThreshold, setConfidenceThreshold] = useState(0.5);
-
-  // Project ID (auto-created on first use)
+  // Project
   const [projectId, setProjectId] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Auto-create default project on mount
+  // Init project
   useEffect(() => {
-    const initProject = async () => {
+    (async () => {
       try {
-        const project = await createProject({name: 'Default Project', description: 'PalmView default'});
-        setProjectId(project.project_id);
-      } catch (err) {
-        console.warn('[GeoAI] Could not create project, using fallback:', err);
-        setProjectId('00000000-0000-0000-0000-000000000000');
+        const ORG = '1b77d523-9e70-4486-b64a-2b78fc600e9e';
+        const list = await listProjects(ORG);
+        setProjectId(list.projects?.length ? list.projects[0].project_id : (
+          await createProject({org_id: ORG, name: 'Default', description: 'PalmView'})
+        ).project_id);
+      } catch {
+        setProjectId('dd341b39-da8f-4142-98e8-da582b6f8d6a');
       }
-    };
-    initProject();
+    })();
     loadHistory();
   }, []);
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      const jobs = await listInferenceJobs();
-      setJobHistory(Array.isArray(jobs) ? jobs : (jobs as any)?.jobs || []);
-    } catch (err) {
-      console.error('[GeoAI] Failed to load history:', err);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, []);
-
-  // Connect WebSocket for job progress
-  const connectWS = useCallback((jobId: string) => {
-    // Close existing connection
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-
-    const ws = connectInferenceStream(
-      jobId,
-      (msg: WSInferenceMessage) => {
-        console.log('[GeoAI WS]', msg);
-        if (msg.type === 'progress' || msg.type === 'status') {
-          setActiveJob(prev => prev ? {
-            ...prev,
-            status: msg.status || prev.status,
-            progress: msg.progress ?? prev.progress,
-          } : prev);
-        }
-        if (msg.type === 'result' && msg.data) {
-          setActiveOutputs(prev => [...prev, msg.data as InferenceOutputItem]);
-        }
-        if (msg.type === 'complete' || msg.type === 'error') {
-          loadHistory();
-        }
-      },
-      (err) => console.error('[GeoAI WS] Error:', err)
-    );
-
-    wsRef.current = ws;
-  }, [loadHistory]);
-
-  // Cleanup WS on unmount
-  useEffect(() => {
-    return () => { wsRef.current?.close(); };
+      const res = await listInferenceJobs();
+      setJobHistory(Array.isArray(res) ? res : (res as any)?.jobs || []);
+    } catch { /* ignore */ }
+    finally { setHistoryLoading(false); }
   }, []);
 
   const handleRunAnalysis = useCallback(async () => {
     if (!taskCategory || (!selectedTarget && !customTarget) || !projectId) return;
 
+    // Close previous WS
+    wsRef.current?.close();
+    wsRef.current = null;
+
     setIsSubmitting(true);
     setSubmitError(null);
+    setActiveJob(null);
 
     const target = selectedTarget || customTarget;
     const job: InferenceJobSubmit = {
@@ -312,43 +261,57 @@ const GeoAiPanelContent = () => {
       task_type: taskCategory,
       aoi: {
         type: 'Polygon',
-        coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]  // placeholder AOI
+        coordinates: [[[103.8, 1.33], [103.85, 1.33], [103.85, 1.37], [103.8, 1.37], [103.8, 1.33]]]
       },
       params: {target},
     };
 
     try {
       const result = await submitInferenceJob(job);
-      console.log('[GeoAI] Job submitted:', result);
+      setActiveJob({job_id: result.job_id, status: 'queued', progress: 0});
 
-      // Set active job and show results panel
-      const jobDetail: InferenceJobDetail = {
-        job_id: result.job_id,
-        project_id: projectId,
-        model_version_id: '',
-        status: 'queued',
-        progress: 0,
-      };
-      setActiveJob(jobDetail);
-      setActiveOutputs([]);
-      setShowResults(true);
-
-      // Connect WebSocket for live progress
-      connectWS(result.job_id);
-
-      // Refresh history
-      await loadHistory();
+      // Connect WebSocket
+      const ws = connectInferenceStream(
+        result.job_id,
+        (msg: WSInferenceMessage) => {
+          if (msg.type === 'progress') {
+            setActiveJob(prev => prev ? {
+              ...prev,
+              status: 'running',
+              progress: msg.pct ?? msg.progress ?? prev.progress,
+            } : prev);
+          }
+          if (msg.type === 'complete') {
+            setActiveJob(prev => prev ? {...prev, status: 'complete', progress: 1} : prev);
+            // TODO: auto-add results to Kepler map via addDataToMap dispatch
+            loadHistory();
+          }
+          if (msg.type === 'error') {
+            setActiveJob(prev => prev ? {...prev, status: 'failed'} : prev);
+            loadHistory();
+          }
+        },
+        (err) => console.error('[GeoAI WS]', err)
+      );
+      wsRef.current = ws;
+      loadHistory();
     } catch (err: any) {
-      console.error('[GeoAI] Submit failed:', err);
-      setSubmitError(err.message || 'Failed to submit job');
+      setSubmitError(err.message || 'Failed to submit');
     } finally {
       setIsSubmitting(false);
     }
-  }, [taskCategory, selectedTarget, customTarget, projectId, loadHistory, connectWS]);
+  }, [taskCategory, selectedTarget, customTarget, projectId, loadHistory]);
+
+  // Cleanup
+  useEffect(() => () => { wsRef.current?.close(); }, []);
+
+  const isRunning = activeJob && (activeJob.status === 'queued' || activeJob.status === 'running');
+  const isComplete = activeJob?.status === 'complete';
+  const isFailed = activeJob?.status === 'failed';
 
   return (
     <StyledGeoAIPanel>
-      {/* 1. Task Selection — by function category */}
+      {/* 1. Task Selection */}
       <StyledSection>
         <StyledSectionTitle>🧠 Analysis Task</StyledSectionTitle>
         <ButtonRow>
@@ -360,6 +323,8 @@ const GeoAiPanelContent = () => {
                 setTaskCategory(taskCategory === cat.id ? null : cat.id);
                 setSelectedTarget(null);
                 setCustomTarget('');
+                setActiveJob(null);
+                setSubmitError(null);
               }}
             >
               {cat.icon} {cat.label}
@@ -367,34 +332,24 @@ const GeoAiPanelContent = () => {
           ))}
         </ButtonRow>
 
-        {/* Target selection */}
         {taskCategory && QUICK_TARGETS[taskCategory] && (
           <>
             <StyledInput
               placeholder={
-                taskCategory === 'detection'
-                  ? 'What to detect?'
-                  : taskCategory === 'segmentation'
-                  ? 'What to segment?'
-                  : taskCategory === 'classification'
-                  ? 'Classification scheme?'
-                  : 'Describe change to detect...'
+                taskCategory === 'detection' ? 'What to detect?' :
+                taskCategory === 'segmentation' ? 'What to segment?' :
+                taskCategory === 'classification' ? 'Classification scheme?' :
+                'Describe change to detect...'
               }
               value={customTarget}
-              onChange={e => {
-                setCustomTarget(e.target.value);
-                setSelectedTarget(null);
-              }}
+              onChange={e => { setCustomTarget(e.target.value); setSelectedTarget(null); }}
             />
             <ChipRow>
               {QUICK_TARGETS[taskCategory].map(t => (
                 <Chip
                   key={t.id}
                   selected={selectedTarget === t.id}
-                  onClick={() => {
-                    setSelectedTarget(selectedTarget === t.id ? null : t.id);
-                    setCustomTarget('');
-                  }}
+                  onClick={() => { setSelectedTarget(selectedTarget === t.id ? null : t.id); setCustomTarget(''); }}
                 >
                   {t.label}
                 </Chip>
@@ -404,7 +359,7 @@ const GeoAiPanelContent = () => {
         )}
       </StyledSection>
 
-      {/* 3. Model Config — collapsible */}
+      {/* 2. Model Config — collapsible */}
       <StyledSection>
         <CollapsibleHeader onClick={() => setModelConfigOpen(!modelConfigOpen)}>
           <StyledSectionTitle style={{margin: 0}}>⚙️ Model Config</StyledSectionTitle>
@@ -417,33 +372,36 @@ const GeoAiPanelContent = () => {
         )}
       </StyledSection>
 
-      {/* Run Button */}
+      {/* Run Button — becomes progress indicator while running */}
       <RunButton
-        disabled={!taskCategory || (!selectedTarget && !customTarget) || isSubmitting}
+        disabled={!taskCategory || (!selectedTarget && !customTarget) || isSubmitting || !!isRunning}
         onClick={handleRunAnalysis}
+        style={isRunning ? {background: 'rgba(108, 191, 183, 0.3)', position: 'relative', overflow: 'hidden'} : undefined}
       >
-        {isSubmitting ? '⏳ Submitting...' : '▶ Run Analysis'}
+        {isRunning && activeJob && (
+          <RunButtonProgress style={{width: `${activeJob.progress * 100}%`}} />
+        )}
+        <span style={{position: 'relative', zIndex: 1}}>
+          {isSubmitting ? '⏳ Submitting...' : isRunning ? '⏳ Analyzing...' : isComplete ? '✅ Complete — ▶ Run Again' : '▶ Run Analysis'}
+        </span>
       </RunButton>
 
-      {submitError && (
-        <EmptyState style={{color: '#F9042C', fontStyle: 'normal'}}>
-          ⚠️ {submitError}
-        </EmptyState>
-      )}
+      {submitError && <ErrorMessage>⚠️ {submitError}</ErrorMessage>}
+      {isFailed && <ErrorMessage>❌ Analysis failed — try again</ErrorMessage>}
 
-      {/* Task History — commit-log style */}
+      {/* 3. Task History */}
       <StyledSection>
         <CollapsibleHeader onClick={loadHistory}>
           <StyledSectionTitle style={{margin: 0}}>
             📋 Task History {jobHistory.length > 0 ? `(${jobHistory.length})` : ''}
           </StyledSectionTitle>
-          <EmptyState style={{margin: 0, cursor: 'pointer'}}>↻ refresh</EmptyState>
+          <EmptyState style={{margin: 0, cursor: 'pointer'}}>↻</EmptyState>
         </CollapsibleHeader>
 
         {historyLoading ? (
           <EmptyState>Loading...</EmptyState>
         ) : jobHistory.length === 0 ? (
-          <EmptyState>No analysis tasks yet. Run your first analysis above.</EmptyState>
+          <EmptyState>No tasks yet</EmptyState>
         ) : (
           <div style={{marginTop: 8}}>
             {jobHistory.slice(0, 10).map(job => (
@@ -454,11 +412,10 @@ const GeoAiPanelContent = () => {
                     {job.status === 'completed' ? '✅' :
                      job.status === 'running' ? '🔄' :
                      job.status === 'failed' ? '❌' : '⏳'}{' '}
-                    {job.status}
+                    {(job as any).task_type || job.status}
                   </div>
                   <div style={{fontSize: 10, opacity: 0.6}}>
-                    {job.created_at ? new Date(job.created_at).toLocaleString() : 'pending'}
-                    {job.progress > 0 && job.progress < 100 && ` · ${Math.round(job.progress)}%`}
+                    {job.created_at ? new Date(job.created_at).toLocaleString() : ''}
                   </div>
                 </div>
               </HistoryItem>
@@ -466,25 +423,6 @@ const GeoAiPanelContent = () => {
           </div>
         )}
       </StyledSection>
-
-      {/* Floating Results Panel (rendered via portal) */}
-      <FloatingResultsPanel
-        isVisible={showResults}
-        job={activeJob}
-        outputs={activeOutputs}
-        confidenceThreshold={confidenceThreshold}
-        onClose={() => {
-          setShowResults(false);
-          wsRef.current?.close();
-        }}
-        onConfidenceChange={setConfidenceThreshold}
-        onAddToMap={() => {
-          console.log('[GeoAI] Add to map — TODO: call addDataToMap');
-        }}
-        onExport={(format) => {
-          console.log(`[GeoAI] Export as ${format} — TODO`);
-        }}
-      />
     </StyledGeoAIPanel>
   );
 };
@@ -492,13 +430,7 @@ const GeoAiPanelContent = () => {
 // ─── Brain Icon ──────────────────────────────────────────────
 
 const BrainIcon = (props: any) => (
-  <svg
-    viewBox="0 0 24 24"
-    width={props.height || '18px'}
-    height={props.height || '18px'}
-    fill="none"
-    stroke="currentColor"
-  >
+  <svg viewBox="0 0 24 24" width={props.height || '18px'} height={props.height || '18px'} fill="none" stroke="currentColor">
     <circle cx="12" cy="10" r="7" strokeWidth="1.5" />
     <path d="M12 3v14M8 7q4 3 8 0M8 13q4-3 8 0" strokeWidth="1" />
     <path d="M12 17v4" strokeWidth="1.5" />
@@ -509,21 +441,15 @@ const BrainIcon = (props: any) => (
 
 function GeoAiCustomPanelsFactory() {
   const CustomPanels: any = () => null;
-
-  CustomPanels.panels = [
-    {
-      id: 'geoai',
-      label: 'GeoAI',
-      iconComponent: BrainIcon,
-      component: GeoAiPanelContent
-    }
-  ];
-
+  CustomPanels.panels = [{
+    id: 'geoai',
+    label: 'GeoAI',
+    iconComponent: BrainIcon,
+    component: GeoAiPanelContent
+  }];
   CustomPanels.getProps = () => ({});
-
   return CustomPanels;
 }
 
 GeoAiCustomPanelsFactory.deps = [];
-
 export default GeoAiCustomPanelsFactory;
