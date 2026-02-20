@@ -662,6 +662,7 @@ const App = props => {
                           <KeplerGl
                             mapboxApiAccessToken={CLOUD_PROVIDERS_CONFIGURATION.MAPBOX_TOKEN}
                             id="map"
+                            appName="PalmView"
                             getState={keplerGlGetState}
                             width={width}
                             height={height}
