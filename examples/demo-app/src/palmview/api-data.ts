@@ -1,5 +1,7 @@
 // PalmView Data API Client — Upload, STAC, GEE, Datasets
-const API_BASE = process.env.PALMVIEW_API_URL || 'http://100.81.217.18:8000';
+const API_BASE =
+  (typeof process !== 'undefined' && process.env?.PALMVIEW_API_URL) ||
+  'http://100.81.217.18:8000';
 
 // ─── Types ───────────────────────────────────────────
 
