@@ -3,7 +3,9 @@
 import React, {useState, useEffect, useCallback} from 'react';
 import styled from 'styled-components';
 
-const API_BASE = process.env.PALMVIEW_API_URL || 'http://100.81.217.18:8000';
+const API_BASE =
+  (typeof process !== 'undefined' && process.env?.PALMVIEW_API_URL) ||
+  'http://100.81.217.18:8000';
 
 // ─── Types ───────────────────────────────────────────
 
