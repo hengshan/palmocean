@@ -1,4 +1,4 @@
-// PalmView Logo Component — replaces Kepler.gl logo
+// PalmView Logo Component — uses Synga official branding
 import React from 'react';
 import styled from 'styled-components';
 
@@ -8,58 +8,38 @@ const LogoContainer = styled.div`
   gap: 8px;
 `;
 
-const LogoIcon = styled.svg`
-  flex-shrink: 0;
-`;
-
 const LogoText = styled.span`
   font-size: 16px;
   font-weight: 700;
-  letter-spacing: 0.5px;
-  color: ${(props: any) => props.theme?.activeColor || '#6CBFB7'};
+  letter-spacing: 0.18em;
+  color: #1FBF6E;
 `;
 
-// Palm tree + eye icon representing PalmView
+// Synga official logo SVG (from synga.git/public/images/logos/synga-icon-green.svg)
+const SyngaIcon = ({size = 24}: {size?: number}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 100 100"
+    fill="none"
+    width={size}
+    height={size}
+  >
+    <circle cx="50" cy="50" r="32" stroke="#1FBF6E" strokeWidth="3.5" />
+    <line x1="50" y1="38" x2="50" y2="14" stroke="#1FBF6E" strokeWidth="3.5" strokeLinecap="round" />
+    <line x1="59" y1="40" x2="76" y2="22" stroke="#1FBF6E" strokeWidth="3.5" strokeLinecap="round" />
+    <line x1="62" y1="50" x2="86" y2="50" stroke="#1FBF6E" strokeWidth="3.5" strokeLinecap="round" />
+    <line x1="59" y1="59" x2="76" y2="77" stroke="#1FBF6E" strokeWidth="3.5" strokeLinecap="round" />
+    <line x1="50" y1="62" x2="50" y2="86" stroke="#1FBF6E" strokeWidth="3.5" strokeLinecap="round" />
+    <line x1="41" y1="59" x2="24" y2="77" stroke="#1FBF6E" strokeWidth="3.5" strokeLinecap="round" />
+    <line x1="38" y1="50" x2="14" y2="50" stroke="#1FBF6E" strokeWidth="3.5" strokeLinecap="round" />
+    <line x1="41" y1="40" x2="24" y2="22" stroke="#1FBF6E" strokeWidth="3.5" strokeLinecap="round" />
+    <circle cx="50" cy="50" r="9" fill="#1FBF6E" />
+  </svg>
+);
+
 const PalmViewLogo = ({appName}: {appName?: string}) => (
   <LogoContainer>
-    <LogoIcon
-      viewBox="0 0 32 32"
-      width="28"
-      height="28"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      {/* Palm tree */}
-      <path
-        d="M16 28V14"
-        stroke="#6CBFB7"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      {/* Palm fronds */}
-      <path
-        d="M16 14C16 14 10 8 6 9C10 10 14 14 16 14Z"
-        fill="#6CBFB7"
-        opacity="0.8"
-      />
-      <path
-        d="M16 14C16 14 14 6 10 4C12 7 14 12 16 14Z"
-        fill="#6CBFB7"
-        opacity="0.9"
-      />
-      <path
-        d="M16 14C16 14 18 6 22 4C20 7 18 12 16 14Z"
-        fill="#6CBFB7"
-        opacity="0.9"
-      />
-      <path
-        d="M16 14C16 14 22 8 26 9C22 10 18 14 16 14Z"
-        fill="#6CBFB7"
-        opacity="0.8"
-      />
-      {/* Satellite/eye hint */}
-      <circle cx="16" cy="14" r="2" fill="#6CBFB7" />
-    </LogoIcon>
+    <SyngaIcon size={28} />
     <LogoText>{appName || 'PalmView'}</LogoText>
   </LogoContainer>
 );
