@@ -1,5 +1,6 @@
 // GeoAI Panel — CustomPanelsFactory replacement for PalmView
 // V2: Task Cards by function category, merged history, AOI shortcuts
+// Theme: Synga brand colors (#1FBF6E accent, #0A3D2E primary, #0D1117 dark)
 import React, {useState} from 'react';
 import styled from 'styled-components';
 

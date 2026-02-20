@@ -18,7 +18,8 @@ import {
   AiAssistantPanel,
   setMapBoundary
 } from '@kepler.gl/ai-assistant';
-import {panelBorderColor, theme} from '@kepler.gl/styles';
+import {panelBorderColor} from '@kepler.gl/styles';
+import palmviewTheme from './styles/palmview-theme';
 import {ParsedConfig} from '@kepler.gl/types';
 import {getApplicationConfig} from '@kepler.gl/utils';
 import {SqlPanel} from '@kepler.gl/duckdb/components';
@@ -634,7 +635,7 @@ const App = props => {
 
   return (
     <StyleSheetManager shouldForwardProp={shouldForwardProp}>
-      <ThemeProvider theme={theme}>
+      <ThemeProvider theme={palmviewTheme}>
         <GlobalStyle
         // this is to apply the same modal style as kepler.gl core
         // because styled-components doesn't always return a node
