@@ -48,14 +48,14 @@ import {
 import {CLOUD_PROVIDERS} from './cloud-providers';
 import {Panel, PanelGroup, PanelResizeHandle} from 'react-resizable-panels';
 
-import GeoAiCustomPanelsFactory from './components/geoai-panel';
+import PalmViewCustomPanelsFactory from './factories/custom-panels';
 
 const {CustomPanelsFactory} = require('@kepler.gl/components');
 const KeplerGl = require('@kepler.gl/components').injectComponents([
   replaceLoadDataModal(),
   replaceMapControl(),
   replacePanelHeader(),
-  [CustomPanelsFactory, GeoAiCustomPanelsFactory]
+  [CustomPanelsFactory, PalmViewCustomPanelsFactory]
 ]);
 
 // Sample data
