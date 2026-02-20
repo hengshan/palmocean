@@ -1,8 +1,14 @@
 // GeoAI Panel — CustomPanelsFactory replacement for PalmView
-// V2: Task Cards by function category, merged history, AOI shortcuts
+// V3: API integration with backend inference jobs
 // Theme: Synga brand colors (#1FBF6E accent, #0A3D2E primary, #0D1117 dark)
-import React, {useState} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import styled from 'styled-components';
+import {
+  submitInferenceJob,
+  listInferenceJobs,
+  type InferenceJobDetail,
+  type InferenceJobSubmit,
+} from '../utils/api';
 
 // ─── Styled Components ───────────────────────────────────────
 
@@ -206,11 +212,69 @@ const QUICK_TARGETS: Record<string, Array<{id: string; label: string}>> = {
 
 // ─── Panel Content Component ─────────────────────────────────
 
+// Default project ID (will be replaced with real project selection)
+const DEFAULT_PROJECT_ID = '00000000-0000-0000-0000-000000000000';
+
 const GeoAiPanelContent = () => {
   const [taskCategory, setTaskCategory] = useState<string | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [customTarget, setCustomTarget] = useState('');
   const [modelConfigOpen, setModelConfigOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [jobHistory, setJobHistory] = useState<InferenceJobDetail[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Load job history on mount
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const jobs = await listInferenceJobs();
+      setJobHistory(jobs);
+    } catch (err) {
+      console.error('[GeoAI] Failed to load history:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const handleRunAnalysis = useCallback(async () => {
+    if (!taskCategory || (!selectedTarget && !customTarget)) return;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    const target = selectedTarget || customTarget;
+    const job: InferenceJobSubmit = {
+      project_id: DEFAULT_PROJECT_ID,
+      task_type: `${taskCategory}:${target}`,
+      aoi: {
+        type: 'Polygon',
+        coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]  // placeholder AOI
+      },
+      params: {target},
+    };
+
+    try {
+      const result = await submitInferenceJob(job);
+      console.log('[GeoAI] Job submitted:', result);
+      // Refresh history
+      await loadHistory();
+      // Reset form
+      setTaskCategory(null);
+      setSelectedTarget(null);
+      setCustomTarget('');
+    } catch (err: any) {
+      console.error('[GeoAI] Submit failed:', err);
+      setSubmitError(err.message || 'Failed to submit job');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [taskCategory, selectedTarget, customTarget, loadHistory]);
 
   return (
     <StyledGeoAIPanel>
@@ -284,14 +348,53 @@ const GeoAiPanelContent = () => {
       </StyledSection>
 
       {/* Run Button */}
-      <RunButton disabled={!taskCategory || (!selectedTarget && !customTarget)}>
-        ▶ Run Analysis
+      <RunButton
+        disabled={!taskCategory || (!selectedTarget && !customTarget) || isSubmitting}
+        onClick={handleRunAnalysis}
+      >
+        {isSubmitting ? '⏳ Submitting...' : '▶ Run Analysis'}
       </RunButton>
 
-      {/* 5. Task History — commit-log style */}
+      {submitError && (
+        <EmptyState style={{color: '#F9042C', fontStyle: 'normal'}}>
+          ⚠️ {submitError}
+        </EmptyState>
+      )}
+
+      {/* Task History — commit-log style */}
       <StyledSection>
-        <StyledSectionTitle>📋 Task History</StyledSectionTitle>
-        <EmptyState>No analysis tasks yet. Run your first analysis above.</EmptyState>
+        <CollapsibleHeader onClick={loadHistory}>
+          <StyledSectionTitle style={{margin: 0}}>
+            📋 Task History {jobHistory.length > 0 ? `(${jobHistory.length})` : ''}
+          </StyledSectionTitle>
+          <EmptyState style={{margin: 0, cursor: 'pointer'}}>↻ refresh</EmptyState>
+        </CollapsibleHeader>
+
+        {historyLoading ? (
+          <EmptyState>Loading...</EmptyState>
+        ) : jobHistory.length === 0 ? (
+          <EmptyState>No analysis tasks yet. Run your first analysis above.</EmptyState>
+        ) : (
+          <div style={{marginTop: 8}}>
+            {jobHistory.slice(0, 10).map(job => (
+              <HistoryItem key={job.job_id}>
+                <HistoryDot />
+                <div style={{flex: 1}}>
+                  <div style={{fontWeight: 500, color: '#D3D8E0'}}>
+                    {job.status === 'completed' ? '✅' :
+                     job.status === 'running' ? '🔄' :
+                     job.status === 'failed' ? '❌' : '⏳'}{' '}
+                    {job.status}
+                  </div>
+                  <div style={{fontSize: 10, opacity: 0.6}}>
+                    {job.created_at ? new Date(job.created_at).toLocaleString() : 'pending'}
+                    {job.progress > 0 && job.progress < 100 && ` · ${Math.round(job.progress)}%`}
+                  </div>
+                </div>
+              </HistoryItem>
+            ))}
+          </div>
+        )}
       </StyledSection>
     </StyledGeoAIPanel>
   );
