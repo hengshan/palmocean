@@ -1,14 +1,19 @@
 // GeoAI Panel — CustomPanelsFactory replacement for PalmView
-// V3: API integration with backend inference jobs
+// V4: Unified palmview module + floating results panel + WebSocket
 // Theme: Synga brand colors (#1FBF6E accent, #0A3D2E primary, #0D1117 dark)
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useState, useEffect, useCallback, useRef} from 'react';
 import styled from 'styled-components';
 import {
   submitInferenceJob,
   listInferenceJobs,
+  connectInferenceStream,
+  createProject,
+  FloatingResultsPanel,
   type InferenceJobDetail,
   type InferenceJobSubmit,
-} from '../utils/api';
+  type InferenceOutputItem,
+  type WSInferenceMessage,
+} from '../palmview';
 
 // ─── Styled Components ───────────────────────────────────────
 
@@ -212,9 +217,6 @@ const QUICK_TARGETS: Record<string, Array<{id: string; label: string}>> = {
 
 // ─── Panel Content Component ─────────────────────────────────
 
-// Default project ID (will be replaced with real project selection)
-const DEFAULT_PROJECT_ID = '00000000-0000-0000-0000-000000000000';
-
 const GeoAiPanelContent = () => {
   const [taskCategory, setTaskCategory] = useState<string | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
@@ -225,8 +227,28 @@ const GeoAiPanelContent = () => {
   const [jobHistory, setJobHistory] = useState<InferenceJobDetail[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Load job history on mount
+  // Floating results panel state
+  const [activeJob, setActiveJob] = useState<InferenceJobDetail | null>(null);
+  const [activeOutputs, setActiveOutputs] = useState<InferenceOutputItem[]>([]);
+  const [showResults, setShowResults] = useState(false);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.5);
+
+  // Project ID (auto-created on first use)
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // Auto-create default project on mount
   useEffect(() => {
+    const initProject = async () => {
+      try {
+        const project = await createProject({name: 'Default Project', description: 'PalmView default'});
+        setProjectId(project.project_id);
+      } catch (err) {
+        console.warn('[GeoAI] Could not create project, using fallback:', err);
+        setProjectId('00000000-0000-0000-0000-000000000000');
+      }
+    };
+    initProject();
     loadHistory();
   }, []);
 
@@ -234,7 +256,7 @@ const GeoAiPanelContent = () => {
     setHistoryLoading(true);
     try {
       const jobs = await listInferenceJobs();
-      setJobHistory(jobs);
+      setJobHistory(Array.isArray(jobs) ? jobs : (jobs as any)?.jobs || []);
     } catch (err) {
       console.error('[GeoAI] Failed to load history:', err);
     } finally {
@@ -242,16 +264,52 @@ const GeoAiPanelContent = () => {
     }
   }, []);
 
+  // Connect WebSocket for job progress
+  const connectWS = useCallback((jobId: string) => {
+    // Close existing connection
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+
+    const ws = connectInferenceStream(
+      jobId,
+      (msg: WSInferenceMessage) => {
+        console.log('[GeoAI WS]', msg);
+        if (msg.type === 'progress' || msg.type === 'status') {
+          setActiveJob(prev => prev ? {
+            ...prev,
+            status: msg.status || prev.status,
+            progress: msg.progress ?? prev.progress,
+          } : prev);
+        }
+        if (msg.type === 'result' && msg.data) {
+          setActiveOutputs(prev => [...prev, msg.data as InferenceOutputItem]);
+        }
+        if (msg.type === 'complete' || msg.type === 'error') {
+          loadHistory();
+        }
+      },
+      (err) => console.error('[GeoAI WS] Error:', err)
+    );
+
+    wsRef.current = ws;
+  }, [loadHistory]);
+
+  // Cleanup WS on unmount
+  useEffect(() => {
+    return () => { wsRef.current?.close(); };
+  }, []);
+
   const handleRunAnalysis = useCallback(async () => {
-    if (!taskCategory || (!selectedTarget && !customTarget)) return;
+    if (!taskCategory || (!selectedTarget && !customTarget) || !projectId) return;
 
     setIsSubmitting(true);
     setSubmitError(null);
 
     const target = selectedTarget || customTarget;
     const job: InferenceJobSubmit = {
-      project_id: DEFAULT_PROJECT_ID,
-      task_type: `${taskCategory}:${target}`,
+      project_id: projectId,
+      task_type: taskCategory,
       aoi: {
         type: 'Polygon',
         coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]  // placeholder AOI
@@ -262,19 +320,31 @@ const GeoAiPanelContent = () => {
     try {
       const result = await submitInferenceJob(job);
       console.log('[GeoAI] Job submitted:', result);
+
+      // Set active job and show results panel
+      const jobDetail: InferenceJobDetail = {
+        job_id: result.job_id,
+        project_id: projectId,
+        model_version_id: '',
+        status: 'queued',
+        progress: 0,
+      };
+      setActiveJob(jobDetail);
+      setActiveOutputs([]);
+      setShowResults(true);
+
+      // Connect WebSocket for live progress
+      connectWS(result.job_id);
+
       // Refresh history
       await loadHistory();
-      // Reset form
-      setTaskCategory(null);
-      setSelectedTarget(null);
-      setCustomTarget('');
     } catch (err: any) {
       console.error('[GeoAI] Submit failed:', err);
       setSubmitError(err.message || 'Failed to submit job');
     } finally {
       setIsSubmitting(false);
     }
-  }, [taskCategory, selectedTarget, customTarget, loadHistory]);
+  }, [taskCategory, selectedTarget, customTarget, projectId, loadHistory, connectWS]);
 
   return (
     <StyledGeoAIPanel>
@@ -396,6 +466,25 @@ const GeoAiPanelContent = () => {
           </div>
         )}
       </StyledSection>
+
+      {/* Floating Results Panel (rendered via portal) */}
+      <FloatingResultsPanel
+        isVisible={showResults}
+        job={activeJob}
+        outputs={activeOutputs}
+        confidenceThreshold={confidenceThreshold}
+        onClose={() => {
+          setShowResults(false);
+          wsRef.current?.close();
+        }}
+        onConfidenceChange={setConfidenceThreshold}
+        onAddToMap={() => {
+          console.log('[GeoAI] Add to map — TODO: call addDataToMap');
+        }}
+        onExport={(format) => {
+          console.log(`[GeoAI] Export as ${format} — TODO`);
+        }}
+      />
     </StyledGeoAIPanel>
   );
 };

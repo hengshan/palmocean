@@ -4,3 +4,4 @@
 export * from './types';
 export * from './api';
 export {FloatingResultsPanel} from './components/floating-results-panel';
+export {buildKeplerPayload, addResultsToKeplerMap} from './kepler-integration';
