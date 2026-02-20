@@ -22,7 +22,7 @@ import {panelBorderColor} from '@kepler.gl/styles';
 import palmviewTheme from './styles/palmview-theme';
 import {ParsedConfig} from '@kepler.gl/types';
 import {getApplicationConfig} from '@kepler.gl/utils';
-import {SqlPanel} from '@kepler.gl/duckdb/components';
+// duckdb disabled
 import Banner from './components/banner';
 import Announcement, {FormLink} from './components/announcement';
 import {replaceLoadDataModal} from './factories/load-data-modal';
@@ -164,9 +164,7 @@ const App = props => {
   // TODO find another way to check for existence of duckDb plugin
   const duckDbPluginEnabled = (getApplicationConfig().plugins || []).some(p => p.name === 'duckdb');
 
-  const isSqlPanelOpen = useSelector(
-    state => duckDbPluginEnabled && state?.demo?.keplerGl?.map?.uiState.mapControls.sqlPanel?.active
-  );
+  const isSqlPanelOpen = false;
 
   const isAiAssistantPanelOpen = useSelector(
     state => state?.demo?.keplerGl?.map?.uiState.mapControls.aiAssistant?.active
