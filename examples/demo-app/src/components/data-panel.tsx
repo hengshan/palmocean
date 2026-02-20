@@ -1,19 +1,34 @@
-// Data Tab — Upload, STAC Browse, Connected Datasets
-// Injected via CustomPanelsFactory alongside GeoAI Tab
-import React, {useState, useEffect, useCallback, useRef} from 'react';
+// Data Tab — Satellite Data Search, Download & Load to Map
+// STAC search (Planetary Computer, Earth Search, Copernicus) + future GEE
+import React, {useState, useEffect, useCallback} from 'react';
 import styled from 'styled-components';
-import {
-  getSTACProviders,
-  searchSTAC,
-  listDatasets,
-  uploadGeoTIFF,
-  importSTACItem,
-  deleteDataset,
-  type STACProvider,
-  type STACItem,
-  type STACSearchParams,
-  type DatasetInfo,
-} from '../palmview/api-data';
+
+const API_BASE = process.env.PALMVIEW_API_URL || 'http://100.81.217.18:8000';
+
+// ─── Types ───────────────────────────────────────────
+
+interface STACProvider {
+  name: string;
+  url: string;
+  requires_auth: boolean;
+  popular_collections: string[];
+}
+
+interface STACCollection {
+  id: string;
+  title?: string;
+  description?: string;
+}
+
+interface STACSearchItem {
+  id: string;
+  collection: string;
+  datetime: string;
+  bbox: number[];
+  properties: Record<string, any>;
+  assets: Record<string, { href: string; type?: string; title?: string }>;
+  links?: Array<{ rel: string; href: string }>;
+}
 
 // ─── Styled Components ───────────────────────────────
 
@@ -23,7 +38,7 @@ const Panel = styled.div`
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   overflow-y: auto;
   ${(p: any) => p.theme?.sidePanelScrollBar || ''}
 `;
@@ -43,28 +58,64 @@ const SectionTitle = styled.div`
   margin-bottom: 8px;
 `;
 
-const TabRow = styled.div`
+const SourceToggle = styled.div`
   display: flex;
   gap: 0;
+  border-radius: 4px;
+  overflow: hidden;
   margin-bottom: 10px;
-  border-bottom: 1px solid ${(p: any) => p.theme?.borderColor || 'rgba(255,255,255,0.1)'};
+  border: 1px solid ${(p: any) => p.theme?.borderColor || 'rgba(255,255,255,0.1)'};
 `;
 
-const Tab = styled.button<{active?: boolean}>`
+const SourceBtn = styled.button<{active?: boolean}>`
   flex: 1;
-  background: transparent;
-  color: ${(p: any) => p.active ? p.theme?.activeColor || '#1FBF6E' : p.theme?.textColor || '#A0A7B4'};
+  background: ${(p: any) => p.active ? p.theme?.activeColor || '#1FBF6E' : 'transparent'};
+  color: ${(p: any) => p.active ? '#fff' : p.theme?.textColor || '#A0A7B4'};
   border: none;
-  border-bottom: 2px solid ${(p: any) => p.active ? p.theme?.activeColor || '#1FBF6E' : 'transparent'};
-  padding: 8px 4px;
+  padding: 8px;
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
+  &:hover { opacity: 0.85; }
+`;
 
-  &:hover {
-    color: ${(p: any) => p.theme?.activeColor || '#1FBF6E'};
-  }
+const Select = styled.select`
+  width: 100%;
+  background: ${(p: any) => p.theme?.inputBgd || '#161b22'};
+  color: ${(p: any) => p.theme?.textColor || '#A0A7B4'};
+  border: 1px solid ${(p: any) => p.theme?.borderColor || 'rgba(255,255,255,0.1)'};
+  border-radius: 4px;
+  padding: 7px 8px;
+  font-size: 11px;
+  outline: none;
+  &:focus { border-color: ${(p: any) => p.theme?.activeColor || '#1FBF6E'}; }
+`;
+
+const Input = styled.input`
+  width: 100%;
+  background: ${(p: any) => p.theme?.inputBgd || '#161b22'};
+  color: ${(p: any) => p.theme?.textColor || '#A0A7B4'};
+  border: 1px solid ${(p: any) => p.theme?.borderColor || 'rgba(255,255,255,0.1)'};
+  border-radius: 4px;
+  padding: 7px 8px;
+  font-size: 11px;
+  outline: none;
+  &:focus { border-color: ${(p: any) => p.theme?.activeColor || '#1FBF6E'}; }
+  &::placeholder { color: ${(p: any) => p.theme?.subtextColor || '#6A7485'}; }
+`;
+
+const Row = styled.div`
+  display: flex;
+  gap: 6px;
+  align-items: center;
+`;
+
+const Label = styled.label`
+  font-size: 10px;
+  color: ${(p: any) => p.theme?.subtextColor || '#6A7485'};
+  margin-bottom: 2px;
+  display: block;
 `;
 
 const Btn = styled.button<{primary?: boolean; small?: boolean; danger?: boolean}>`
@@ -75,69 +126,47 @@ const Btn = styled.button<{primary?: boolean; small?: boolean; danger?: boolean}
   color: ${(p: any) => (p.primary || p.danger) ? '#fff' : p.theme?.textColor || '#A0A7B4'};
   border: 1px solid ${(p: any) => (p.primary || p.danger) ? 'transparent' : p.theme?.borderColor || 'rgba(255,255,255,0.1)'};
   border-radius: 4px;
-  padding: ${(p: any) => p.small ? '4px 8px' : '6px 12px'};
+  padding: ${(p: any) => p.small ? '4px 8px' : '8px 12px'};
   font-size: ${(p: any) => p.small ? '10px' : '11px'};
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
+  white-space: nowrap;
   &:hover { opacity: 0.85; }
   &:disabled { opacity: 0.4; cursor: not-allowed; }
 `;
 
-const Input = styled.input`
-  width: 100%;
-  background: ${(p: any) => p.theme?.panelBackground || 'rgba(0,0,0,0.2)'};
-  color: ${(p: any) => p.theme?.textColor || '#A0A7B4'};
-  border: 1px solid ${(p: any) => p.theme?.borderColor || 'rgba(255,255,255,0.1)'};
-  border-radius: 4px;
-  padding: 6px 8px;
-  font-size: 11px;
-  outline: none;
-  &:focus { border-color: ${(p: any) => p.theme?.activeColor || '#1FBF6E'}; }
-  &::placeholder { color: ${(p: any) => p.theme?.subtextColor || '#6A7485'}; }
-`;
-
-const Select = styled.select`
-  width: 100%;
-  background: ${(p: any) => p.theme?.panelBackground || 'rgba(0,0,0,0.2)'};
-  color: ${(p: any) => p.theme?.textColor || '#A0A7B4'};
-  border: 1px solid ${(p: any) => p.theme?.borderColor || 'rgba(255,255,255,0.1)'};
-  border-radius: 4px;
-  padding: 6px 8px;
-  font-size: 11px;
-  outline: none;
-`;
-
-const DropZone = styled.div<{isDragging?: boolean}>`
-  border: 2px dashed ${(p: any) => p.isDragging ? p.theme?.activeColor || '#1FBF6E' : p.theme?.borderColor || 'rgba(255,255,255,0.15)'};
-  border-radius: 8px;
-  padding: 24px 16px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: ${(p: any) => p.isDragging ? 'rgba(31,191,110,0.05)' : 'transparent'};
-
-  &:hover {
-    border-color: ${(p: any) => p.theme?.activeColor || '#1FBF6E'};
-  }
-`;
-
-const ItemCard = styled.div`
+const ResultCard = styled.div`
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: 10px;
+  padding: 10px;
   background: ${(p: any) => p.theme?.panelBackground || 'rgba(0,0,0,0.2)'};
   border-radius: 4px;
   margin-top: 6px;
-  font-size: 11px;
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
+  &:hover { border-color: ${(p: any) => p.theme?.activeColor || '#1FBF6E'}; }
 `;
 
 const Thumb = styled.img`
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   border-radius: 4px;
   object-fit: cover;
   background: rgba(0,0,0,0.3);
+  flex-shrink: 0;
+`;
+
+const ThumbPlaceholder = styled.div`
+  width: 64px;
+  height: 64px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
 `;
 
 const Muted = styled.span`
@@ -145,266 +174,311 @@ const Muted = styled.span`
   font-size: 10px;
 `;
 
-const ProgressBar = styled.div<{pct: number}>`
-  height: 4px;
-  background: ${(p: any) => p.theme?.panelBackground || 'rgba(255,255,255,0.1)'};
-  border-radius: 2px;
-  margin-top: 8px;
-  overflow: hidden;
-
-  &::after {
-    content: '';
-    display: block;
-    height: 100%;
-    width: ${(p: any) => p.pct}%;
-    background: ${(p: any) => p.theme?.activeColor || '#1FBF6E'};
-    transition: width 0.3s;
-  }
+const Badge = styled.span<{color?: string}>`
+  background: ${(p: any) => p.color || 'rgba(255,255,255,0.1)'};
+  color: #fff;
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-weight: 500;
 `;
 
-// ─── Sub-Tabs ────────────────────────────────────────
+const SliderRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+`;
 
-type DataView = 'upload' | 'stac' | 'datasets';
+const Slider = styled.input`
+  flex: 1;
+  accent-color: ${(p: any) => p.theme?.activeColor || '#1FBF6E'};
+`;
 
-// ─── Upload View ─────────────────────────────────────
+const EmptyMsg = styled.p`
+  color: ${(p: any) => p.theme?.subtextColor || '#6A7485'};
+  font-size: 11px;
+  font-style: italic;
+  text-align: center;
+  padding: 16px 0;
+  margin: 0;
+`;
 
-const UploadView = ({onUploaded}: {onUploaded: () => void}) => {
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadPct, setUploadPct] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+const Divider = styled.div`
+  height: 1px;
+  background: ${(p: any) => p.theme?.borderColor || 'rgba(255,255,255,0.08)'};
+  margin: 4px 0;
+`;
 
-  const handleFile = async (file: File) => {
-    if (!file.name.match(/\.(tif|tiff|geotiff)$/i)) {
-      setError('Please upload a GeoTIFF file (.tif)');
-      return;
-    }
-    setUploading(true);
-    setError(null);
-    setUploadPct(0);
-    try {
-      await uploadGeoTIFF(file, setUploadPct);
-      onUploaded();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setUploading(false);
-    }
-  };
+// ─── Helper ──────────────────────────────────────────
 
-  return (
-    <>
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".tif,.tiff"
-        style={{display: 'none'}}
-        onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
-      />
-      <DropZone
-        isDragging={isDragging}
-        onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={e => { e.preventDefault(); setIsDragging(false); e.dataTransfer.files[0] && handleFile(e.dataTransfer.files[0]); }}
-        onClick={() => fileRef.current?.click()}
-      >
-        <div style={{fontSize: 24, marginBottom: 4}}>🗺️</div>
-        <div style={{fontSize: 12, fontWeight: 500}}>
-          {uploading ? `Uploading... ${uploadPct}%` : 'Drop GeoTIFF here or click to browse'}
-        </div>
-        <Muted>Supports .tif, .tiff files</Muted>
-      </DropZone>
-      {uploading && <ProgressBar pct={uploadPct} />}
-      {error && <Muted style={{color: '#F9042C'}}>⚠️ {error}</Muted>}
-    </>
-  );
-};
+function formatDate(iso: string): string {
+  return iso?.slice(0, 10) || '—';
+}
 
-// ─── STAC Browser View ───────────────────────────────
+function getCloudCover(props: Record<string, any>): number | null {
+  return props['eo:cloud_cover'] ?? props['cloudcover'] ?? null;
+}
 
-const STACView = ({onImported}: {onImported: () => void}) => {
+function getThumbnail(item: STACSearchItem): string | null {
+  const thumb = item.assets?.thumbnail?.href || item.assets?.rendered_preview?.href;
+  if (thumb) return thumb;
+  // Try links
+  const link = item.links?.find(l => l.rel === 'preview' || l.rel === 'thumbnail');
+  return link?.href || null;
+}
+
+// ─── Data Panel Content ──────────────────────────────
+
+const DataPanelContent = () => {
+  // Source toggle
+  const [source, setSource] = useState<'stac' | 'gee'>('stac');
+
+  // STAC state
   const [providers, setProviders] = useState<Record<string, STACProvider>>({});
   const [selectedProvider, setSelectedProvider] = useState('planetary-computer');
-  const [collection, setCollection] = useState('sentinel-2-l2a');
-  const [bbox, setBbox] = useState('-104,39,-103,40');  // Colorado sample
-  const [results, setResults] = useState<STACItem[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [importing, setImporting] = useState<string | null>(null);
+  const [collections, setCollections] = useState<STACCollection[]>([]);
+  const [selectedCollection, setSelectedCollection] = useState('sentinel-2-l2a');
+  const [dateFrom, setDateFrom] = useState('2025-01-01');
+  const [dateTo, setDateTo] = useState('2025-12-31');
+  const [maxCloud, setMaxCloud] = useState(30);
+  const [bboxStr, setBboxStr] = useState('103.6,1.2,104.0,1.45'); // Singapore default
 
+  // Results
+  const [results, setResults] = useState<STACSearchItem[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Download state
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  // Load providers
   useEffect(() => {
-    getSTACProviders().then(setProviders).catch(console.error);
+    fetch(`${API_BASE}/api/v1/data/stac/providers`)
+      .then(r => r.json())
+      .then(setProviders)
+      .catch(console.error);
   }, []);
 
-  const handleSearch = async () => {
+  // Load collections when provider changes
+  useEffect(() => {
+    if (!selectedProvider) return;
+    setCollections([]);
+    fetch(`${API_BASE}/api/v1/data/stac/${selectedProvider}/collections`)
+      .then(r => r.json())
+      .then(data => {
+        const cols = Array.isArray(data) ? data : [];
+        setCollections(cols);
+        // Auto-select first popular or first available
+        const popular = providers[selectedProvider]?.popular_collections;
+        if (popular?.length) {
+          const match = cols.find((c: any) => popular.includes(typeof c === 'string' ? c : c.id));
+          if (match) setSelectedCollection(typeof match === 'string' ? match : match.id);
+        }
+      })
+      .catch(console.error);
+  }, [selectedProvider, providers]);
+
+  // Search
+  const handleSearch = useCallback(async () => {
     setSearching(true);
+    setSearchError(null);
+    setResults([]);
     try {
-      const [w, s, e, n] = bbox.split(',').map(Number);
-      const params: STACSearchParams = {
-        provider: selectedProvider,
-        collections: [collection],
-        bbox: [w, s, e, n],
-        limit: 10,
-      };
-      const res = await searchSTAC(params);
-      setResults(Array.isArray(res) ? res : res.items || []);
-    } catch (err) {
-      console.error('[Data] STAC search failed:', err);
+      const bbox = bboxStr.split(',').map(Number);
+      if (bbox.length !== 4 || bbox.some(isNaN)) throw new Error('Invalid bbox format');
+
+      const url = new URL(`${API_BASE}/api/v1/data/stac/${selectedProvider}/search`);
+      url.searchParams.set('collection', selectedCollection);
+      url.searchParams.set('bbox', bbox.join(','));
+      url.searchParams.set('datetime', `${dateFrom}/${dateTo}`);
+      url.searchParams.set('limit', '20');
+
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error(`Search failed: ${res.status}`);
+      const data = await res.json();
+
+      let items: STACSearchItem[] = Array.isArray(data) ? data :
+        data.features || data.items || [];
+
+      // Filter by cloud cover client-side
+      items = items.filter(item => {
+        const cc = getCloudCover(item.properties);
+        return cc === null || cc <= maxCloud;
+      });
+
+      setResults(items);
+    } catch (err: any) {
+      setSearchError(err.message);
     } finally {
       setSearching(false);
     }
-  };
+  }, [selectedProvider, selectedCollection, bboxStr, dateFrom, dateTo, maxCloud]);
 
-  const handleImport = async (item: STACItem) => {
-    setImporting(item.id);
+  // Download + Load
+  const handleDownloadAndLoad = useCallback(async (item: STACSearchItem) => {
+    setDownloading(item.id);
     try {
-      await importSTACItem(item.id, selectedProvider, 'visual');
-      onImported();
-    } catch (err) {
-      console.error('[Data] Import failed:', err);
+      const res = await fetch(
+        `${API_BASE}/api/v1/data/stac/${selectedProvider}/${selectedCollection}/${item.id}/download`,
+        {method: 'POST'}
+      );
+      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+      const data = await res.json();
+      console.log('[Data] Downloaded:', data);
+      // TODO: call Kepler addDataToMap with the downloaded data URL
+      alert(`Downloaded! URL: ${data.download_url || data.url || 'check console'}`);
+    } catch (err: any) {
+      console.error('[Data] Download failed:', err);
+      alert(`Download failed: ${err.message}`);
     } finally {
-      setImporting(null);
+      setDownloading(null);
     }
-  };
-
-  return (
-    <>
-      <div style={{display: 'flex', flexDirection: 'column', gap: 6}}>
-        <Select value={selectedProvider} onChange={e => setSelectedProvider(e.target.value)}>
-          {Object.entries(providers).map(([key, p]) => (
-            <option key={key} value={key}>{p.name}</option>
-          ))}
-        </Select>
-
-        <Input
-          value={collection}
-          onChange={e => setCollection(e.target.value)}
-          placeholder="Collection (e.g. sentinel-2-l2a)"
-        />
-
-        <Input
-          value={bbox}
-          onChange={e => setBbox(e.target.value)}
-          placeholder="Bbox: west,south,east,north"
-        />
-
-        <Btn primary onClick={handleSearch} disabled={searching}>
-          {searching ? '🔍 Searching...' : '🔍 Search'}
-        </Btn>
-      </div>
-
-      {results.length > 0 && (
-        <div style={{marginTop: 8}}>
-          <Muted>{results.length} results</Muted>
-          {results.map(item => (
-            <ItemCard key={item.id}>
-              {item.thumbnail && <Thumb src={item.thumbnail} alt="" />}
-              <div style={{flex: 1, minWidth: 0}}>
-                <div style={{fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
-                  {item.id}
-                </div>
-                <Muted>{item.datetime?.slice(0, 10)} · {item.collection}</Muted>
-              </div>
-              <Btn small primary onClick={() => handleImport(item)} disabled={importing === item.id}>
-                {importing === item.id ? '...' : '＋'}
-              </Btn>
-            </ItemCard>
-          ))}
-        </div>
-      )}
-    </>
-  );
-};
-
-// ─── Connected Datasets View ─────────────────────────
-
-const DatasetsView = ({datasets, loading, onRefresh, onDelete}: {
-  datasets: DatasetInfo[];
-  loading: boolean;
-  onRefresh: () => void;
-  onDelete: (id: string) => void;
-}) => (
-  <>
-    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-      <Muted>{datasets.length} dataset{datasets.length !== 1 ? 's' : ''}</Muted>
-      <Btn small onClick={onRefresh} disabled={loading}>↻</Btn>
-    </div>
-    {loading ? (
-      <Muted>Loading...</Muted>
-    ) : datasets.length === 0 ? (
-      <Muted style={{fontStyle: 'italic', display: 'block', textAlign: 'center', padding: 16}}>
-        No datasets yet. Upload a GeoTIFF or import from STAC.
-      </Muted>
-    ) : (
-      datasets.map(ds => (
-        <ItemCard key={ds.id}>
-          <div style={{flex: 1, minWidth: 0}}>
-            <div style={{fontWeight: 500}}>{ds.name}</div>
-            <Muted>
-              {ds.source_type} · {ds.format}
-              {ds.resolution ? ` · ${ds.resolution}m` : ''}
-              {ds.bands ? ` · ${ds.bands.length} bands` : ''}
-            </Muted>
-          </div>
-          <Btn small danger onClick={() => onDelete(ds.id)}>✕</Btn>
-        </ItemCard>
-      ))
-    )}
-  </>
-);
-
-// ─── Main Data Panel Content ─────────────────────────
-
-const DataPanelContent = () => {
-  const [view, setView] = useState<DataView>('stac');
-  const [datasets, setDatasets] = useState<DatasetInfo[]>([]);
-  const [dsLoading, setDsLoading] = useState(false);
-
-  const refreshDatasets = useCallback(async () => {
-    setDsLoading(true);
-    try {
-      const ds = await listDatasets();
-      setDatasets(Array.isArray(ds) ? ds : []);
-    } catch (err) {
-      console.error('[Data] Failed to load datasets:', err);
-    } finally {
-      setDsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { refreshDatasets(); }, [refreshDatasets]);
-
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteDataset(id);
-      refreshDatasets();
-    } catch (err) {
-      console.error('[Data] Delete failed:', err);
-    }
-  };
+  }, [selectedProvider, selectedCollection]);
 
   return (
     <Panel>
-      <TabRow>
-        <Tab active={view === 'stac'} onClick={() => setView('stac')}>🛰 Satellite</Tab>
-        <Tab active={view === 'upload'} onClick={() => setView('upload')}>📁 Upload</Tab>
-        <Tab active={view === 'datasets'} onClick={() => setView('datasets')}>
-          📊 Datasets {datasets.length > 0 ? `(${datasets.length})` : ''}
-        </Tab>
-      </TabRow>
+      {/* Source Toggle */}
+      <SourceToggle>
+        <SourceBtn active={source === 'stac'} onClick={() => setSource('stac')}>
+          🛰 STAC Satellite
+        </SourceBtn>
+        <SourceBtn active={source === 'gee'} onClick={() => setSource('gee')}>
+          🌍 Google Earth Engine
+        </SourceBtn>
+      </SourceToggle>
 
-      <Section>
-        {view === 'upload' && <UploadView onUploaded={refreshDatasets} />}
-        {view === 'stac' && <STACView onImported={refreshDatasets} />}
-        {view === 'datasets' && (
-          <DatasetsView
-            datasets={datasets}
-            loading={dsLoading}
-            onRefresh={refreshDatasets}
-            onDelete={handleDelete}
-          />
-        )}
-      </Section>
+      {source === 'gee' ? (
+        <EmptyMsg>🌍 GEE integration coming soon. Use STAC for now.</EmptyMsg>
+      ) : (
+        <>
+          {/* Provider + Collection */}
+          <Section>
+            <SectionTitle>🛰 Data Source</SectionTitle>
+
+            <Label>Provider</Label>
+            <Select value={selectedProvider} onChange={e => setSelectedProvider(e.target.value)}>
+              {Object.entries(providers).map(([key, p]) => (
+                <option key={key} value={key}>{p.name}</option>
+              ))}
+            </Select>
+
+            <div style={{height: 6}} />
+
+            <Label>Collection</Label>
+            <Select value={selectedCollection} onChange={e => setSelectedCollection(e.target.value)}>
+              {/* Popular collections first */}
+              {providers[selectedProvider]?.popular_collections?.map(c => (
+                <option key={c} value={c}>⭐ {c}</option>
+              ))}
+              <option disabled>──────────</option>
+              {collections.map(c => {
+                const id = typeof c === 'string' ? c : c.id;
+                const title = typeof c === 'string' ? c : c.title || c.id;
+                return <option key={id} value={id}>{title}</option>;
+              })}
+            </Select>
+          </Section>
+
+          {/* Search Parameters */}
+          <Section>
+            <SectionTitle>🔍 Search Parameters</SectionTitle>
+
+            <Label>Bounding Box (west, south, east, north)</Label>
+            <Input
+              value={bboxStr}
+              onChange={e => setBboxStr(e.target.value)}
+              placeholder="103.6,1.2,104.0,1.45"
+            />
+            <Muted>Tip: use map extent for current view</Muted>
+
+            <div style={{height: 6}} />
+
+            <Row>
+              <div style={{flex: 1}}>
+                <Label>From</Label>
+                <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+              </div>
+              <div style={{flex: 1}}>
+                <Label>To</Label>
+                <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+              </div>
+            </Row>
+
+            <div style={{height: 6}} />
+
+            <Label>Max Cloud Cover: {maxCloud}%</Label>
+            <SliderRow>
+              <Slider
+                type="range"
+                min={0}
+                max={100}
+                value={maxCloud}
+                onChange={e => setMaxCloud(Number(e.target.value))}
+              />
+              <Muted>{maxCloud}%</Muted>
+            </SliderRow>
+          </Section>
+
+          {/* Search Button */}
+          <Btn primary onClick={handleSearch} disabled={searching} style={{width: '100%'}}>
+            {searching ? '🔍 Searching...' : '🔍 Search Satellite Data'}
+          </Btn>
+
+          {searchError && <Muted style={{color: '#F9042C'}}>⚠️ {searchError}</Muted>}
+
+          {/* Results */}
+          {results.length > 0 && (
+            <Section>
+              <SectionTitle>📡 Results ({results.length})</SectionTitle>
+              {results.map(item => {
+                const thumb = getThumbnail(item);
+                const cc = getCloudCover(item.properties);
+                const isDownloading = downloading === item.id;
+
+                return (
+                  <ResultCard key={item.id}>
+                    {thumb ? (
+                      <Thumb src={thumb} alt={item.id} />
+                    ) : (
+                      <ThumbPlaceholder>🛰</ThumbPlaceholder>
+                    )}
+                    <div style={{flex: 1, minWidth: 0}}>
+                      <div style={{
+                        fontWeight: 500,
+                        fontSize: 11,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        color: '#D3D8E0'
+                      }}>
+                        {item.id}
+                      </div>
+                      <div style={{display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap'}}>
+                        <Badge>📅 {formatDate(item.datetime)}</Badge>
+                        {cc !== null && (
+                          <Badge color={cc < 10 ? '#22c55e' : cc < 30 ? '#eab308' : '#F9042C'}>
+                            ☁️ {Math.round(cc)}%
+                          </Badge>
+                        )}
+                      </div>
+                      <Row style={{marginTop: 6}}>
+                        <Btn small primary onClick={() => handleDownloadAndLoad(item)} disabled={isDownloading}>
+                          {isDownloading ? '⏳ Downloading...' : '⬇️ Download & Load'}
+                        </Btn>
+                      </Row>
+                    </div>
+                  </ResultCard>
+                );
+              })}
+            </Section>
+          )}
+
+          {!searching && results.length === 0 && !searchError && (
+            <EmptyMsg>Search for satellite imagery above. Results will appear here.</EmptyMsg>
+          )}
+        </>
+      )}
     </Panel>
   );
 };
@@ -423,16 +497,12 @@ const DataIcon = (props: any) => (
 
 function DataTabFactory() {
   const DataTab: any = () => null;
-
-  DataTab.panels = [
-    {
-      id: 'data',
-      label: 'Data',
-      iconComponent: DataIcon,
-      component: DataPanelContent,
-    }
-  ];
-
+  DataTab.panels = [{
+    id: 'data',
+    label: 'Data',
+    iconComponent: DataIcon,
+    component: DataPanelContent,
+  }];
   DataTab.getProps = () => ({});
   return DataTab;
 }
