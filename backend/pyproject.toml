@@ -17,6 +17,7 @@ dependencies = [
     "geoalchemy2>=0.15",
     "alembic>=1.13",
     "python-dotenv>=1.2.1",
+    "shapely>=2.1.2",
 ]
 
 [project.optional-dependencies]
