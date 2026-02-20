@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     s3_secret_key: str = ""
 
     # Google Earth Engine
-    gee_service_account_email: str = "palmview@pandai-888888.iam.gserviceaccount.com"
+    gee_service_account_email: str = "geo-agent@pandai-888888.iam.gserviceaccount.com"
     gee_service_account_key_file: str = str(BASE_DIR / "credentials" / "pandai-888888-bc1fa6e8406f.json")
     gee_project: str = "pandai-888888"
 
