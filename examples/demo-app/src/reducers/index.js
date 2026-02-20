@@ -90,6 +90,12 @@ const {DEFAULT_EXPORT_MAP} = uiStateUpdaters;
 const demoReducer = combineReducers({
   // mount keplerGl reducer
   keplerGl: keplerGlReducer.initialState({
+    // Default map center: Singapore
+    mapState: {
+      latitude: 1.3521,
+      longitude: 103.8198,
+      zoom: 11
+    },
     // In order to provide single file export functionality
     // we are going to set the mapbox access token to be used
     // in the exported file
