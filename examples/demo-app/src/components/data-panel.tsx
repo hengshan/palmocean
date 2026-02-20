@@ -249,8 +249,10 @@ const DataPanelContent = () => {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Download state
+  // Download/Load state
   const [downloading, setDownloading] = useState<string | null>(null);
+  // Loaded raster layers (managed outside Kepler)
+  const [loadedLayers, setLoadedLayers] = useState<Array<{id: string; itemId: string; visible: boolean}>>([]);
 
   // Load providers
   useEffect(() => {
@@ -315,26 +317,66 @@ const DataPanelContent = () => {
     }
   }, [selectedProvider, selectedCollection, bboxStr, dateFrom, dateTo, maxCloud]);
 
-  // Download + Load
-  const handleDownloadAndLoad = useCallback(async (item: STACSearchItem) => {
+  // Load raster to map via mapbox raster source
+  // Kepler can't handle GeoTIFF natively — use mapbox addSource/addLayer (#90)
+  const handleLoadToMap = useCallback(async (item: STACSearchItem) => {
     setDownloading(item.id);
     try {
+      // 1. Get tile URL from backend
       const res = await fetch(
-        `${API_BASE}/api/v1/data/stac/${selectedProvider}/${selectedCollection}/${item.id}/download`,
-        {method: 'POST'}
+        `${API_BASE}/api/v1/data/stac/${selectedProvider}/${selectedCollection}/${item.id}/tile-url?asset_key=visual`
       );
-      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+      if (!res.ok) throw new Error(`Failed to get tile URL: ${res.status}`);
       const data = await res.json();
-      console.log('[Data] Downloaded:', data);
-      // TODO: call Kepler addDataToMap with the downloaded data URL
-      alert(`Downloaded! URL: ${data.download_url || data.url || 'check console'}`);
+      const tileUrl = data.tile_url || data.url;
+
+      if (!tileUrl) {
+        // Fallback: use COG asset href directly as image overlay
+        const cogHref = item.assets?.visual?.href || item.assets?.['B04']?.href;
+        if (cogHref && item.bbox) {
+          const [west, south, east, north] = item.bbox;
+          console.log('[Data] Loading as image overlay:', cogHref);
+          // Store layer info — actual mapbox integration needs map ref (TODO #90)
+          const layerId = `stac-${item.id}-${Date.now()}`;
+          setLoadedLayers(prev => [...prev, {id: layerId, itemId: item.id, visible: true}]);
+          console.log('[Data] Layer registered:', layerId, {
+            type: 'image',
+            url: cogHref,
+            coordinates: [[west,north],[east,north],[east,south],[west,south]]
+          });
+          return;
+        }
+        throw new Error('No tile URL or COG asset available');
+      }
+
+      // 2. Register as raster tile layer
+      const layerId = `stac-${item.id}-${Date.now()}`;
+      setLoadedLayers(prev => [...prev, {id: layerId, itemId: item.id, visible: true}]);
+
+      console.log('[Data] Raster layer registered:', layerId, {
+        type: 'raster',
+        tiles: [tileUrl],
+        tileSize: 256,
+        bbox: item.bbox,
+      });
+
+      // NOTE: Actual mapbox map.addSource/addLayer requires map instance ref
+      // This will be connected when we get mapbox ref via MapContainerFactory (#90)
+      // For now, log the layer config for debugging
+
     } catch (err: any) {
-      console.error('[Data] Download failed:', err);
-      alert(`Download failed: ${err.message}`);
+      console.error('[Data] Load to map failed:', err);
     } finally {
       setDownloading(null);
     }
   }, [selectedProvider, selectedCollection]);
+
+  // Remove loaded layer
+  const handleRemoveLayer = useCallback((layerId: string) => {
+    setLoadedLayers(prev => prev.filter(l => l.id !== layerId));
+    // TODO: map.removeLayer + map.removeSource when map ref available
+    console.log('[Data] Layer removed:', layerId);
+  }, []);
 
   return (
     <Panel>
@@ -463,14 +505,30 @@ const DataPanelContent = () => {
                         )}
                       </div>
                       <Row style={{marginTop: 6}}>
-                        <Btn small primary onClick={() => handleDownloadAndLoad(item)} disabled={isDownloading}>
-                          {isDownloading ? '⏳ Downloading...' : '⬇️ Download & Load'}
+                        <Btn small primary onClick={() => handleLoadToMap(item)} disabled={isDownloading}>
+                          {isDownloading ? '⏳ Loading...' : '🗺️ Load to Map'}
                         </Btn>
+                        {loadedLayers.some(l => l.itemId === item.id) && (
+                          <Badge color="#1FBF6E">✓ Loaded</Badge>
+                        )}
                       </Row>
                     </div>
                   </ResultCard>
                 );
               })}
+            </Section>
+          )}
+
+          {/* Loaded Raster Layers */}
+          {loadedLayers.length > 0 && (
+            <Section>
+              <SectionTitle>🗺️ Loaded Layers ({loadedLayers.length})</SectionTitle>
+              {loadedLayers.map(layer => (
+                <Row key={layer.id} style={{justifyContent: 'space-between', padding: '4px 0'}}>
+                  <Muted style={{fontSize: 11}}>{layer.itemId}</Muted>
+                  <Btn small danger onClick={() => handleRemoveLayer(layer.id)}>✕</Btn>
+                </Row>
+              ))}
             </Section>
           )}
 
