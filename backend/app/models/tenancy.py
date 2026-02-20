@@ -62,7 +62,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
 
-    memberships: Mapped[list[Membership]] = relationship(back_populates="user")
+    memberships: Mapped[list[Membership]] = relationship(back_populates="user", foreign_keys="[Membership.user_id]")
 
 
 # ── roles ─────────────────────────────────────────────────────────────
