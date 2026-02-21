@@ -2,6 +2,8 @@
 // V5: Inline progress, auto-add results to map, clean UX
 import React, {useState, useEffect, useCallback, useRef} from 'react';
 import styled from 'styled-components';
+import {useSelector} from 'react-redux';
+import {FloatingResultsPanel} from '../palmview';
 import {
   submitInferenceJob,
   listInferenceJobs,
@@ -306,10 +308,21 @@ const GeoAiPanelContent = () => {
   const [aoiState, setAoiState] = useState<AoiState>(getMapState().aoiState);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Subscribe to AOI state from Geoman/raster-state
+  // Subscribe to AOI state from raster-state
   useEffect(() => {
     return subscribe((s) => setAoiState(s.aoiState));
   }, []);
+
+  // Bridge: read Kepler datasets for GeoAI↔Data Tab awareness
+  const keplerDatasets = useSelector(
+    (state: any) => state?.demo?.keplerGl?.map?.visState?.datasets
+  );
+  const dataLayerCount = keplerDatasets ? Object.keys(keplerDatasets).length : 0;
+
+  // Floating Results Panel state
+  const [showResults, setShowResults] = useState(false);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.5);
+  const [jobOutputs, setJobOutputs] = useState<any[]>([]);
 
   // Init project
   useEffect(() => {
@@ -378,7 +391,13 @@ const GeoAiPanelContent = () => {
           }
           if (msg.type === 'complete') {
             setActiveJob(prev => prev ? {...prev, status: 'complete', progress: 1} : prev);
-            // TODO: auto-add results to Kepler map via addDataToMap dispatch
+            setShowResults(true);
+            // Fetch outputs for results panel
+            import('../palmview').then(({getJobOutputs}) => {
+              getJobOutputs(result.job_id).then(res => {
+                setJobOutputs(res.outputs || []);
+              }).catch(() => {});
+            });
             loadHistory();
           }
           if (msg.type === 'error') {
@@ -517,6 +536,40 @@ const GeoAiPanelContent = () => {
 
       {submitError && <ErrorMessage>⚠️ {submitError}</ErrorMessage>}
       {isFailed && <ErrorMessage>❌ Analysis failed — try again</ErrorMessage>}
+
+      {/* Data Layers Bridge */}
+      {dataLayerCount > 0 && (
+        <StyledSection>
+          <StyledSectionTitle>🗂 Data Layers ({dataLayerCount})</StyledSectionTitle>
+          <div style={{fontSize: 11, color: '#A0A7B4'}}>
+            {Object.values(keplerDatasets || {}).map((ds: any) => (
+              <div key={ds.id} style={{padding: '2px 0', display: 'flex', alignItems: 'center', gap: 6}}>
+                <span style={{color: '#4ecdc4'}}>●</span>
+                <span>{ds.label || ds.id}</span>
+                <span style={{opacity: 0.5, fontSize: 10}}>
+                  {ds.dataContainer?.numRows ? `${ds.dataContainer.numRows} rows` : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        </StyledSection>
+      )}
+
+      {/* Floating Results Panel */}
+      <FloatingResultsPanel
+        isVisible={showResults && !!activeJob}
+        job={activeJob as any}
+        outputs={jobOutputs}
+        confidenceThreshold={confidenceThreshold}
+        onClose={() => setShowResults(false)}
+        onConfidenceChange={setConfidenceThreshold}
+        onAddToMap={() => {
+          console.log('[GeoAI] Add results to map — TODO: dispatch addDataToMap');
+        }}
+        onExport={(format) => {
+          console.log('[GeoAI] Export results as', format);
+        }}
+      />
 
       {/* 3. Task History */}
       <StyledSection>
