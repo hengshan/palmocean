@@ -147,7 +147,35 @@ const RotateIcon = () => (
   </svg>
 );
 
-// No CSS hack needed — Geoman native UI disabled via controlsUiEnabledByDefault: false
+/**
+ * Cursor override: Deck.gl's getCursor() always returns 'grab' by default,
+ * which overrides Geoman's CSS cursor changes. We need to set cursor
+ * directly on the map canvas when AOI draw mode is active.
+ *
+ * The map container has a .maplibregl-canvas element whose cursor
+ * is controlled by Deck.gl. We override it with !important when drawing.
+ */
+const AOI_CURSOR_CSS_ID = 'palmview-aoi-cursor';
+
+function setMapCursor(cursor: string | null) {
+  let styleEl = document.getElementById(AOI_CURSOR_CSS_ID) as HTMLStyleElement;
+  if (!cursor) {
+    // Remove override — let Deck.gl control cursor again
+    if (styleEl) styleEl.remove();
+    return;
+  }
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = AOI_CURSOR_CSS_ID;
+    document.head.appendChild(styleEl);
+  }
+  // Override Deck.gl's inline cursor with !important
+  styleEl.textContent = `
+    .deck-canvas, .maplibregl-canvas, .overlays canvas {
+      cursor: ${cursor} !important;
+    }
+  `;
+}
 
 // ── Geometry helpers ─────────────────────────────────
 
@@ -276,6 +304,8 @@ const AoiControl: React.FC<AoiControlProps> = () => {
           syncAoiState();
           console.log('[AOI] Created:', geometry.type, '| Total:', drawnFeaturesRef.current.size);
         }
+        // After drawing completes, Geoman exits draw mode — reset cursor
+        setMapCursor(null);
       });
 
       map.on('gm:edit', () => syncAoiState());
@@ -328,6 +358,7 @@ const AoiControl: React.FC<AoiControlProps> = () => {
       gm.disableGlobalCutMode?.();
       gm.disableGlobalRotateMode?.();
     } catch (_) {}
+    setMapCursor(null); // Restore default cursor
   }, []);
 
   // Activate a Geoman mode
@@ -341,11 +372,22 @@ const AoiControl: React.FC<AoiControlProps> = () => {
     if (mode === activeMode) {
       // Toggle off
       setActiveMode(null);
+      setMapCursor(null);
       return;
     }
 
     setActiveMode(mode);
     console.log('[AOI] Activating mode:', mode);
+
+    // Set cursor based on mode type
+    const drawModes: AoiDrawMode[] = ['rectangle', 'polygon', 'circle'];
+    if (drawModes.includes(mode)) {
+      setMapCursor('crosshair');
+    } else if (mode === 'edit' || mode === 'drag' || mode === 'rotate') {
+      setMapCursor('move');
+    } else if (mode === 'delete' || mode === 'cut') {
+      setMapCursor('pointer');
+    }
 
     try {
       switch (mode) {
@@ -420,7 +462,10 @@ const AoiControl: React.FC<AoiControlProps> = () => {
         })),
       }),
     };
-    return () => { delete (window as any).__PALMVIEW_AOI; };
+    return () => {
+      delete (window as any).__PALMVIEW_AOI;
+      setMapCursor(null); // Cleanup cursor override on unmount
+    };
   }, []);
 
   return (
