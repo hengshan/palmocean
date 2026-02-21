@@ -1,88 +1,93 @@
 /**
  * AOI Control — Kepler MapControl action component for Geoman integration.
- * 
- * Follows the same pattern as AiAssistantControl / MapDrawPanel:
- * - Registers as an actionComponent in MapControl grid
- * - Uses MapControlButton for consistent hover/click UX  
- * - Geoman toolbar shown as a sub-panel (like MapDrawPanel's MapControlToolbar)
+ *
+ * Follows MapDrawPanel pattern exactly:
+ * - MapControlButton as the main toggle
+ * - VerticalToolbar with ToolbarItems as the sub-menu
+ * - Geoman API called from ToolbarItem onClick handlers
+ * - Active/hover states match Kepler's native draw tools
  *
  * Author: Lyra · 2026-02-21
  */
 
 import React, {useCallback, useEffect, useRef, useState} from 'react';
+import styled from 'styled-components';
+import classnames from 'classnames';
 import {MapControlButton} from '@kepler.gl/components';
 import {setAoiGeometry, setAoiMode, clearAoi, getMapState, subscribe} from '../palmview/raster-state';
 import type {AoiState} from '../palmview/raster-state';
 
-// ── Dark theme CSS for Geoman ────────────────────────
+// ── Styled Components (matching Kepler patterns) ─────
 
-const GEOMAN_DARK_CSS = `
-.geoman-controls {
-  z-index: 999 !important;
-  pointer-events: all !important;
-}
-.geoman-controls .maplibregl-ctrl-group {
-  background: rgba(36, 39, 48, 0.95) !important;
-  border: 1px solid rgba(255,255,255,0.1) !important;
-  box-shadow: 0 6px 12px 0 rgba(0,0,0,0.16) !important;
-  border-radius: 4px !important;
-  pointer-events: all !important;
-}
-.geoman-controls button {
-  background: transparent !important;
-  border: none !important;
-  width: 29px !important;
-  height: 29px !important;
-  pointer-events: all !important;
-  cursor: pointer !important;
-  position: relative !important;
-}
-.geoman-controls button:hover {
-  background: rgba(255,255,255,0.12) !important;
-}
-.geoman-controls button.active,
-.geoman-controls button[class*="active"] {
-  background: #1FBF6E !important;
-}
-.geoman-controls button svg,
-.geoman-controls button img {
-  filter: invert(0.7) !important;
-}
-.geoman-controls button.active svg,
-.geoman-controls button.active img,
-.geoman-controls button[class*="active"] svg,
-.geoman-controls button[class*="active"] img {
-  filter: invert(1) !important;
-}
-.geoman-tooltip,
-[class*="geoman"][class*="tooltip"] {
-  background: rgba(36, 39, 48, 0.95) !important;
-  color: #a0a7b4 !important;
-  border: 1px solid rgba(255,255,255,0.1) !important;
-  border-radius: 4px !important;
-  font-size: 11px !important;
-}
+const StyledToolbar = styled.div<{$show?: boolean}>`
+  display: flex;
+  flex-direction: column;
+  background-color: ${props => props.theme.dropdownListBgd};
+  box-shadow: ${props => props.theme.dropdownListShadow};
+  font-size: 12px;
+  transition: ${props => props.theme.transitionSlow};
+  margin-top: ${props => (props.$show ? '6px' : '20px')};
+  opacity: ${props => (props.$show ? 1 : 0)};
+  pointer-events: ${props => (props.$show ? 'all' : 'none')};
+  z-index: 1000;
+  position: absolute;
+  right: 32px;
+  transform: translateX(calc(-50% + 45px));
+
+  .toolbar-item {
+    width: 120px;
+    padding: 13px 16px;
+    flex-direction: row;
+    justify-content: flex-start;
+
+    .toolbar-item__svg-container {
+      width: 16px;
+      height: 16px;
+      margin-right: 10px;
+    }
+
+    .toolbar-item__title {
+      margin-left: auto;
+      margin-right: auto;
+    }
+  }
 `;
 
-function injectDarkThemeCSS() {
-  if (document.getElementById('geoman-dark-theme')) return;
-  const style = document.createElement('style');
-  style.id = 'geoman-dark-theme';
-  style.textContent = GEOMAN_DARK_CSS;
-  document.head.appendChild(style);
-}
+const StyledToolbarItem = styled.div<{$active?: boolean}>`
+  color: ${props =>
+    props.$active ? props.theme.toolbarItemIconHover : props.theme.panelHeaderIcon};
+  padding: 13px 16px;
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  width: 140px;
+  justify-content: flex-start;
+  border: 1px solid ${props => (props.$active ? props.theme.toolbarItemBorderHover : 'transparent')};
+  border-radius: ${props => props.theme.toolbarItemBorderRaddius || '2px'};
+  background-color: ${props =>
+    props.$active ? props.theme.toolbarItemBgdHover : props.theme.dropdownListBgd};
+  cursor: pointer;
+  gap: 8px;
 
-// ── AOI Icon (crosshair + rectangle) ─────────────────
+  .toolbar-item__title {
+    white-space: nowrap;
+    color: ${props => props.theme.textColorHl};
+    font-size: 11px;
+  }
+
+  &:hover {
+    background-color: ${props => props.theme.toolbarItemBgdHover};
+    border-color: ${props => props.theme.toolbarItemBorderHover};
+    svg {
+      color: ${props => props.theme.toolbarItemIconHover};
+    }
+  }
+`;
+
+// ── Icons ────────────────────────────────────────────
 
 const AoiIcon = ({height = '18px'}: {height?: string}) => (
-  <svg 
-    width={height} 
-    height={height} 
-    viewBox="0 0 16 16" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="1.5"
-  >
+  <svg width={height} height={height} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
     <rect x="3" y="3" width="10" height="10" rx="1" />
     <line x1="8" y1="0" x2="8" y2="4" />
     <line x1="8" y1="12" x2="8" y2="16" />
@@ -90,6 +95,75 @@ const AoiIcon = ({height = '18px'}: {height?: string}) => (
     <line x1="12" y1="8" x2="16" y2="8" />
   </svg>
 );
+
+const RectangleIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <rect x="2" y="3" width="12" height="10" rx="1" />
+  </svg>
+);
+
+const PolygonIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <polygon points="8,1 14,5 12,14 4,14 2,5" />
+  </svg>
+);
+
+const CircleIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <circle cx="8" cy="8" r="6" />
+  </svg>
+);
+
+const EditIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" />
+  </svg>
+);
+
+const DragIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M8 1v14M1 8h14M8 1l-2 2M8 1l2 2M8 15l-2-2M8 15l2-2M1 8l2-2M1 8l2 2M15 8l-2-2M15 8l-2 2" />
+  </svg>
+);
+
+const DeleteIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 10h8l1-10" />
+  </svg>
+);
+
+const CutIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <circle cx="5" cy="12" r="2" />
+    <circle cx="11" cy="12" r="2" />
+    <path d="M5 10L11 2M11 10L5 2" />
+  </svg>
+);
+
+const RotateIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M13 8A5 5 0 1 1 8 3" />
+    <path d="M8 1l2 2-2 2" />
+  </svg>
+);
+
+// ── Geoman dark theme CSS ────────────────────────────
+
+const GEOMAN_HIDE_CSS = `
+/* Hide Geoman native toolbar — we use Kepler ToolbarItems instead */
+.geoman-controls,
+.maplibregl-ctrl-top-left .maplibregl-ctrl-group {
+  display: none !important;
+}
+`;
+
+function injectHideCSS() {
+  if (document.getElementById('geoman-hide-native')) return;
+  const style = document.createElement('style');
+  style.id = 'geoman-hide-native';
+  style.textContent = GEOMAN_HIDE_CSS;
+  document.head.appendChild(style);
+}
 
 // ── Geometry helpers ─────────────────────────────────
 
@@ -118,42 +192,52 @@ function mergeGeometries(geometries: GeoJSON.Geometry[]): GeoJSON.Polygon | GeoJ
   return {type: 'MultiPolygon', coordinates: polygons};
 }
 
+// ── AOI draw modes ───────────────────────────────────
+
+type AoiDrawMode = 'rectangle' | 'polygon' | 'circle' | 'edit' | 'drag' | 'delete' | 'cut' | 'rotate' | null;
+
+const AOI_TOOLS: {mode: AoiDrawMode; label: string; Icon: React.FC}[] = [
+  {mode: 'rectangle', label: 'Rectangle', Icon: RectangleIcon},
+  {mode: 'polygon',   label: 'Polygon',   Icon: PolygonIcon},
+  {mode: 'circle',    label: 'Circle',    Icon: CircleIcon},
+  {mode: 'edit',      label: 'Edit',      Icon: EditIcon},
+  {mode: 'drag',      label: 'Drag',      Icon: DragIcon},
+  {mode: 'rotate',    label: 'Rotate',    Icon: RotateIcon},
+  {mode: 'cut',       label: 'Cut',       Icon: CutIcon},
+  {mode: 'delete',    label: 'Delete',    Icon: DeleteIcon},
+];
+
 // ── Status Dot ───────────────────────────────────────
 
-const StatusDot = ({hasAoi}: {hasAoi: boolean}) => (
-  <div style={{
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    width: 8,
-    height: 8,
-    borderRadius: '50%',
-    background: hasAoi ? '#4ecdc4' : 'transparent',
-    border: hasAoi ? '1px solid #4ecdc4' : 'none',
-    zIndex: 1,
-    transition: 'background 0.2s',
-  }} />
-);
+const StatusDot = styled.div<{$hasAoi: boolean}>`
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: ${p => (p.$hasAoi ? '#4ecdc4' : 'transparent')};
+  border: ${p => (p.$hasAoi ? '1px solid #4ecdc4' : 'none')};
+  z-index: 1;
+  transition: background 0.2s;
+`;
 
 // ── Component ────────────────────────────────────────
 
 interface AoiControlProps {
-  mapControls?: any;
-  onToggleMapControl?: (control: string) => void;
   [key: string]: any;
 }
 
 const AoiControl: React.FC<AoiControlProps> = () => {
-  const [active, setActive] = useState(false);
+  const [panelActive, setPanelActive] = useState(false);
+  const [activeMode, setActiveMode] = useState<AoiDrawMode>(null);
   const [aoiState, setLocalAoiState] = useState<AoiState>(getMapState().aoiState);
   const geomanRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const drawnFeaturesRef = useRef<Map<string, GeoJSON.Geometry>>(new Map());
 
   // Subscribe to AOI state
-  useEffect(() => {
-    return subscribe((s) => setLocalAoiState(s.aoiState));
-  }, []);
+  useEffect(() => subscribe((s) => setLocalAoiState(s.aoiState)), []);
 
   // Sync drawn features → AOI state
   const syncAoiState = useCallback(() => {
@@ -167,44 +251,16 @@ const AoiControl: React.FC<AoiControlProps> = () => {
     }
   }, []);
 
-  // Initialize Geoman when map is available
+  // Initialize Geoman
   const initGeoman = useCallback(async (map: any) => {
     if (geomanRef.current) return;
     try {
       const {Geoman} = await import('@geoman-io/maplibre-geoman-free');
       await import('@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css');
-      injectDarkThemeCSS();
+      injectHideCSS(); // Always hide native toolbar
 
       const gm = new Geoman(map, {controls: {helper: true}});
       geomanRef.current = gm;
-
-      // Hide toolbar initially
-      const hideToolbar = () => {
-        const container = map.getContainer?.();
-        if (!container) return;
-        const el = container.querySelector('.geoman-controls') ||
-                   container.querySelector('.maplibregl-ctrl-top-left');
-        if (el) (el as HTMLElement).style.display = 'none';
-      };
-
-      map.on('gm:loaded', () => {
-        console.log('[AOI] Geoman loaded');
-        hideToolbar();
-      });
-
-      // Fallback polling
-      let polls = 0;
-      const poller = setInterval(() => {
-        polls++;
-        const container = map.getContainer?.();
-        const el = container?.querySelector('.geoman-controls');
-        if (el) {
-          clearInterval(poller);
-          (el as HTMLElement).style.display = 'none';
-          console.log('[AOI] Geoman toolbar found via polling');
-        }
-        if (polls > 30) clearInterval(poller);
-      }, 500);
 
       // Events
       map.on('gm:create', (e: any) => {
@@ -233,10 +289,9 @@ const AoiControl: React.FC<AoiControlProps> = () => {
           drawnFeaturesRef.current.clear();
         }
         syncAoiState();
-        console.log('[AOI] Removed | Remaining:', drawnFeaturesRef.current.size);
       });
 
-      console.log('[AOI] Geoman initialized');
+      console.log('[AOI] Geoman initialized (native toolbar hidden, using Kepler ToolbarItems)');
     } catch (err) {
       console.error('[AOI] Geoman init failed:', err);
     }
@@ -256,41 +311,11 @@ const AoiControl: React.FC<AoiControlProps> = () => {
     return () => clearInterval(interval);
   }, [initGeoman]);
 
-  // Show/hide Geoman toolbar
-  const showGeomanToolbar = useCallback(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const container = map.getContainer?.();
-    if (!container) return;
-    const el = container.querySelector('.geoman-controls') as HTMLElement;
-    if (el) {
-      el.style.display = 'block';
-      el.style.position = 'fixed';
-      el.style.left = '320px';
-      el.style.top = '12px';
-      el.style.zIndex = '999';
-      el.style.pointerEvents = 'all';
-      // Force clickable buttons
-      el.querySelectorAll('button').forEach((btn: HTMLElement) => {
-        btn.style.pointerEvents = 'all';
-        btn.style.cursor = 'pointer';
-      });
-    }
-  }, []);
-
-  const hideGeomanToolbar = useCallback(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const container = map.getContainer?.();
-    if (!container) return;
-    const el = container.querySelector('.geoman-controls') as HTMLElement;
-    if (el) el.style.display = 'none';
-  }, []);
-
+  // Disable all Geoman modes
   const disableAllModes = useCallback(() => {
+    const gm = geomanRef.current;
+    if (!gm) return;
     try {
-      const gm = geomanRef.current;
-      if (!gm) return;
       gm.disableDraw?.();
       gm.disableGlobalEditMode?.();
       gm.disableGlobalDragMode?.();
@@ -300,22 +325,69 @@ const AoiControl: React.FC<AoiControlProps> = () => {
     } catch (_) {}
   }, []);
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
+  // Activate a Geoman mode
+  const activateMode = useCallback((mode: AoiDrawMode) => {
+    const gm = geomanRef.current;
+    if (!gm) return;
+
+    // First disable all
+    disableAllModes();
+
+    if (mode === activeMode) {
+      // Toggle off
+      setActiveMode(null);
+      return;
+    }
+
+    setActiveMode(mode);
+
+    try {
+      switch (mode) {
+        case 'rectangle':
+          gm.enableDraw('rectangle');
+          break;
+        case 'polygon':
+          gm.enableDraw('polygon');
+          break;
+        case 'circle':
+          gm.enableDraw('circle');
+          break;
+        case 'edit':
+          gm.enableGlobalEditMode();
+          break;
+        case 'drag':
+          gm.enableGlobalDragMode();
+          break;
+        case 'delete':
+          gm.enableGlobalRemovalMode();
+          break;
+        case 'cut':
+          gm.enableGlobalCutMode();
+          break;
+        case 'rotate':
+          gm.enableGlobalRotateMode();
+          break;
+      }
+    } catch (err) {
+      console.warn('[AOI] Mode activation failed:', mode, err);
+    }
+  }, [activeMode, disableAllModes]);
+
+  // Toggle panel
+  const handleToggle = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    const next = !active;
-    setActive(next);
-    if (next) {
-      showGeomanToolbar();
-    } else {
-      hideGeomanToolbar();
+    const next = !panelActive;
+    setPanelActive(next);
+    if (!next) {
       disableAllModes();
+      setActiveMode(null);
       if (drawnFeaturesRef.current.size === 0) {
         setAoiMode('idle');
       } else {
         setAoiMode('drawn');
       }
     }
-  }, [active, showGeomanToolbar, hideGeomanToolbar, disableAllModes]);
+  }, [panelActive, disableAllModes]);
 
   // Expose API on window
   useEffect(() => {
@@ -343,15 +415,37 @@ const AoiControl: React.FC<AoiControlProps> = () => {
   }, []);
 
   return (
-    <div style={{position: 'relative'}}>
-      <StatusDot hasAoi={!!aoiState.geometry} />
-      <MapControlButton
-        className="map-control-button toggle-aoi"
-        onClick={handleClick}
-        active={active}
-      >
-        <AoiIcon height="18px" />
-      </MapControlButton>
+    <div className="map-aoi-controls" style={{position: 'relative'}}>
+      {panelActive ? (
+        <StyledToolbar $show={panelActive}>
+          {AOI_TOOLS.map(({mode, label, Icon}) => (
+            <StyledToolbarItem
+              key={mode}
+              $active={activeMode === mode}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                activateMode(mode);
+              }}
+            >
+              <div style={{width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                <Icon />
+              </div>
+              <div className="toolbar-item__title">{label}</div>
+            </StyledToolbarItem>
+          ))}
+        </StyledToolbar>
+      ) : null}
+      <div style={{position: 'relative'}}>
+        <StatusDot $hasAoi={!!aoiState.geometry} />
+        <MapControlButton
+          className={classnames('map-control-button', 'toggle-aoi', {isActive: panelActive})}
+          onClick={handleToggle}
+          active={panelActive}
+        >
+          <AoiIcon height="18px" />
+        </MapControlButton>
+      </div>
     </div>
   );
 };
