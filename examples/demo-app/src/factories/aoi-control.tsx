@@ -1,23 +1,21 @@
 /**
- * AOI Control — Kepler MapControl action component for Geoman integration.
+ * AOI Control — Kepler MapControl action component using Nebula.gl editor modes.
  *
- * Follows MapDrawPanel pattern exactly:
- * - MapControlButton as the main toggle
- * - VerticalToolbar with ToolbarItems as the sub-menu
- * - Geoman API called from ToolbarItem onClick handlers
- * - Active/hover states match Kepler's native draw tools
+ * Replaces Geoman-based AOI drawing with Kepler's built-in editor layer
+ * (powered by @nebula.gl/edit-modes). Uses the same pattern as map-draw-panel.tsx.
  *
  * Author: Lyra · 2026-02-21
  */
 
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import styled from 'styled-components';
 import classnames from 'classnames';
 import {MapControlButton} from '@kepler.gl/components';
-import {setAoiGeometry, setAoiMode, clearAoi, getMapState, subscribe} from '../palmview/raster-state';
-import type {AoiState} from '../palmview/raster-state';
+import {EDITOR_MODES} from '@kepler.gl/constants';
+import {Editor, MapControls} from '@kepler.gl/types';
+import {setAoiGeometry, setAoiMode, clearAoi} from '../palmview/raster-state';
 
-// ── Styled Components (matching Kepler patterns) ─────
+// ── Styled Components ────────────────────────────────
 
 const StyledToolbar = styled.div<{$show?: boolean}>`
   display: flex;
@@ -33,24 +31,6 @@ const StyledToolbar = styled.div<{$show?: boolean}>`
   position: absolute;
   right: 32px;
   transform: translateX(calc(-50% + 45px));
-
-  .toolbar-item {
-    width: 120px;
-    padding: 13px 16px;
-    flex-direction: row;
-    justify-content: flex-start;
-
-    .toolbar-item__svg-container {
-      width: 16px;
-      height: 16px;
-      margin-right: 10px;
-    }
-
-    .toolbar-item__title {
-      margin-left: auto;
-      margin-right: auto;
-    }
-  }
 `;
 
 const StyledToolbarItem = styled.div<{$active?: boolean}>`
@@ -114,29 +94,15 @@ const CircleIcon = () => (
   </svg>
 );
 
+const FreehandIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M2 12C4 8 6 4 8 6C10 8 12 2 14 4" />
+  </svg>
+);
+
 const EditIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
     <path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" />
-  </svg>
-);
-
-const DragIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-    <path d="M8 1v14M1 8h14M8 1l-2 2M8 1l2 2M8 15l-2-2M8 15l2-2M1 8l2-2M1 8l2 2M15 8l-2-2M15 8l-2 2" />
-  </svg>
-);
-
-const DeleteIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-    <path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 10h8l1-10" />
-  </svg>
-);
-
-const CutIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-    <circle cx="5" cy="12" r="2" />
-    <circle cx="11" cy="12" r="2" />
-    <path d="M5 10L11 2M11 10L5 2" />
   </svg>
 );
 
@@ -147,76 +113,35 @@ const RotateIcon = () => (
   </svg>
 );
 
-/**
- * Cursor override: Deck.gl's getCursor() always returns 'grab' by default,
- * which overrides Geoman's CSS cursor changes. We need to set cursor
- * directly on the map canvas when AOI draw mode is active.
- *
- * The map container has a .maplibregl-canvas element whose cursor
- * is controlled by Deck.gl. We override it with !important when drawing.
- */
-const AOI_CURSOR_CSS_ID = 'palmview-aoi-cursor';
+const ScaleIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <rect x="4" y="4" width="8" height="8" />
+    <path d="M12 12l3 3M1 1l3 3" />
+  </svg>
+);
 
-function setMapCursor(cursor: string | null) {
-  let styleEl = document.getElementById(AOI_CURSOR_CSS_ID) as HTMLStyleElement;
-  if (!cursor) {
-    // Remove override — let Deck.gl control cursor again
-    if (styleEl) styleEl.remove();
-    return;
-  }
-  if (!styleEl) {
-    styleEl = document.createElement('style');
-    styleEl.id = AOI_CURSOR_CSS_ID;
-    document.head.appendChild(styleEl);
-  }
-  // Override Deck.gl's inline cursor with !important
-  styleEl.textContent = `
-    .deck-canvas, .maplibregl-canvas, .overlays canvas {
-      cursor: ${cursor} !important;
-    }
-  `;
-}
+const DeleteIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 10h8l1-10" />
+  </svg>
+);
 
-// ── Geometry helpers ─────────────────────────────────
+// ── Tool definitions ─────────────────────────────────
 
-function extractGeometry(e: any): GeoJSON.Geometry | null {
-  if (e.feature?.geometry) return e.feature.geometry;
-  if (e.shape?.geometry) return e.shape.geometry;
-  if (e.layer?.toGeoJSON) return e.layer.toGeoJSON().geometry;
-  return null;
-}
+type AoiTool = {
+  mode: string;
+  label: string;
+  Icon: React.FC;
+};
 
-function mergeGeometries(geometries: GeoJSON.Geometry[]): GeoJSON.Polygon | GeoJSON.MultiPolygon | null {
-  if (geometries.length === 0) return null;
-  if (geometries.length === 1) {
-    const g = geometries[0];
-    if (g.type === 'Polygon') return g;
-    if (g.type === 'MultiPolygon') return g;
-    return null;
-  }
-  const polygons: GeoJSON.Position[][][] = [];
-  for (const g of geometries) {
-    if (g.type === 'Polygon') polygons.push(g.coordinates);
-    else if (g.type === 'MultiPolygon') polygons.push(...g.coordinates);
-  }
-  if (polygons.length === 0) return null;
-  if (polygons.length === 1) return {type: 'Polygon', coordinates: polygons[0]};
-  return {type: 'MultiPolygon', coordinates: polygons};
-}
-
-// ── AOI draw modes ───────────────────────────────────
-
-type AoiDrawMode = 'rectangle' | 'polygon' | 'circle' | 'edit' | 'drag' | 'delete' | 'cut' | 'rotate' | null;
-
-const AOI_TOOLS: {mode: AoiDrawMode; label: string; Icon: React.FC}[] = [
-  {mode: 'rectangle', label: 'Rectangle', Icon: RectangleIcon},
-  {mode: 'polygon',   label: 'Polygon',   Icon: PolygonIcon},
-  {mode: 'circle',    label: 'Circle',    Icon: CircleIcon},
-  {mode: 'edit',      label: 'Edit',      Icon: EditIcon},
-  {mode: 'drag',      label: 'Drag',      Icon: DragIcon},
-  {mode: 'rotate',    label: 'Rotate',    Icon: RotateIcon},
-  {mode: 'cut',       label: 'Cut',       Icon: CutIcon},
-  {mode: 'delete',    label: 'Delete',    Icon: DeleteIcon},
+const AOI_TOOLS: AoiTool[] = [
+  {mode: EDITOR_MODES.DRAW_RECTANGLE, label: 'Rectangle', Icon: RectangleIcon},
+  {mode: EDITOR_MODES.DRAW_POLYGON, label: 'Polygon', Icon: PolygonIcon},
+  {mode: EDITOR_MODES.DRAW_CIRCLE, label: 'Circle', Icon: CircleIcon},
+  {mode: EDITOR_MODES.DRAW_FREEHAND, label: 'Freehand', Icon: FreehandIcon},
+  {mode: EDITOR_MODES.EDIT, label: 'Select', Icon: EditIcon},
+  {mode: EDITOR_MODES.ROTATE, label: 'Rotate', Icon: RotateIcon},
+  {mode: EDITOR_MODES.SCALE, label: 'Scale', Icon: ScaleIcon},
 ];
 
 // ── Status Dot ───────────────────────────────────────
@@ -237,235 +162,110 @@ const StatusDot = styled.div<{$hasAoi: boolean}>`
 // ── Component ────────────────────────────────────────
 
 interface AoiControlProps {
+  editor: Editor;
+  mapControls: MapControls;
+  onToggleMapControl: (control: string) => void;
+  onSetEditorMode: (mode: string) => void;
   [key: string]: any;
 }
 
-const AoiControl: React.FC<AoiControlProps> = () => {
+const AoiControl: React.FC<AoiControlProps> = ({
+  editor,
+  mapControls,
+  onToggleMapControl,
+  onSetEditorMode
+}) => {
   const [panelActive, setPanelActive] = useState(false);
-  const [activeMode, setActiveMode] = useState<AoiDrawMode>(null);
-  const [aoiState, setLocalAoiState] = useState<AoiState>(getMapState().aoiState);
-  const geomanRef = useRef<any>(null);
-  const mapRef = useRef<any>(null);
-  const drawnFeaturesRef = useRef<Map<string, GeoJSON.Geometry>>(new Map());
+  const hasFeatures = editor?.features?.length > 0;
 
-  // Subscribe to AOI state
-  useEffect(() => subscribe((s) => setLocalAoiState(s.aoiState)), []);
-
-  // Sync drawn features → AOI state
-  const syncAoiState = useCallback(() => {
-    const geometries = Array.from(drawnFeaturesRef.current.values());
-    const merged = mergeGeometries(geometries);
-    if (merged) {
-      setAoiGeometry(merged);
-      setAoiMode('drawn');
-    } else {
-      clearAoi();
-    }
-  }, []);
-
-  // Initialize Geoman
-  const initGeoman = useCallback(async (map: any) => {
-    if (geomanRef.current) return;
-    try {
-      const {Geoman} = await import('@geoman-io/maplibre-geoman-free');
-      await import('@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css');
-
-      // Initialize Geoman with NO native toolbar UI — we drive it via Kepler ToolbarItems
-      const gm = new Geoman(map, {
-        settings: {
-          controlsUiEnabledByDefault: false,  // No native buttons, just the drawing engine
-        },
-      });
-      geomanRef.current = gm;
-
-      // Wait for Geoman to be fully ready
-      const onReady = () => {
-        console.log('[AOI] Geoman engine ready (no native toolbar, using Kepler UI)');
-      };
-      map.on('gm:loaded', onReady);
-
-      // Fallback: poll until gm is responsive
-      let polls = 0;
-      const poller = setInterval(() => {
-        polls++;
-        if (gm.enableDraw) {
-          clearInterval(poller);
-          console.log('[AOI] Geoman API available (poll attempt', polls, ')');
-        }
-        if (polls > 30) clearInterval(poller);
-      }, 500);
-
-      // Events
-      map.on('gm:create', (e: any) => {
-        const geometry = extractGeometry(e);
-        if (geometry) {
-          const id = `aoi-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-          drawnFeaturesRef.current.set(id, geometry);
-          syncAoiState();
-          console.log('[AOI] Created:', geometry.type, '| Total:', drawnFeaturesRef.current.size);
-        }
-        // After drawing completes, Geoman exits draw mode — reset cursor
-        setMapCursor(null);
-      });
-
-      map.on('gm:edit', () => syncAoiState());
-
-      map.on('gm:remove', (e: any) => {
-        const geometry = extractGeometry(e);
-        if (geometry) {
-          const geoStr = JSON.stringify(geometry);
-          for (const [id, g] of drawnFeaturesRef.current) {
-            if (JSON.stringify(g) === geoStr) {
-              drawnFeaturesRef.current.delete(id);
-              break;
-            }
-          }
-        } else if (drawnFeaturesRef.current.size === 1) {
-          drawnFeaturesRef.current.clear();
-        }
-        syncAoiState();
-      });
-
-      console.log('[AOI] Geoman initialized (native toolbar hidden, using Kepler ToolbarItems)');
-    } catch (err) {
-      console.error('[AOI] Geoman init failed:', err);
-    }
-  }, [syncAoiState]);
-
-  // Poll for map
+  // Sync editor features → palmview AOI state + window.__PALMVIEW_AOI
   useEffect(() => {
-    const check = () => {
-      const m = (window as any).__PALMVIEW_MAP;
-      if (m && !mapRef.current) {
-        mapRef.current = m;
-        initGeoman(m);
-      }
-    };
-    check();
-    const interval = setInterval(check, 500);
-    return () => clearInterval(interval);
-  }, [initGeoman]);
-
-  // Disable all Geoman modes
-  const disableAllModes = useCallback(() => {
-    const gm = geomanRef.current;
-    if (!gm) return;
-    try {
-      gm.disableDraw?.();
-      gm.disableGlobalEditMode?.();
-      gm.disableGlobalDragMode?.();
-      gm.disableGlobalRemovalMode?.();
-      gm.disableGlobalCutMode?.();
-      gm.disableGlobalRotateMode?.();
-    } catch (_) {}
-    setMapCursor(null); // Restore default cursor
-  }, []);
-
-  // Activate a Geoman mode
-  const activateMode = useCallback((mode: AoiDrawMode) => {
-    const gm = geomanRef.current;
-    if (!gm) return;
-
-    // First disable all
-    disableAllModes();
-
-    if (mode === activeMode) {
-      // Toggle off
-      setActiveMode(null);
-      setMapCursor(null);
+    const features = editor?.features;
+    if (!features || features.length === 0) {
+      // Only clear if we previously had features (avoid clearing on mount)
       return;
     }
 
-    setActiveMode(mode);
-    console.log('[AOI] Activating mode:', mode);
-
-    // Set cursor based on mode type
-    const drawModes: AoiDrawMode[] = ['rectangle', 'polygon', 'circle'];
-    if (drawModes.includes(mode)) {
-      setMapCursor('crosshair');
-    } else if (mode === 'edit' || mode === 'drag' || mode === 'rotate') {
-      setMapCursor('move');
-    } else if (mode === 'delete' || mode === 'cut') {
-      setMapCursor('pointer');
+    // Merge all polygon features into AOI geometry
+    const polygons: GeoJSON.Position[][][] = [];
+    for (const f of features) {
+      const g = f.geometry;
+      if (g?.type === 'Polygon') polygons.push(g.coordinates);
+      else if (g?.type === 'MultiPolygon') polygons.push(...g.coordinates);
     }
 
-    try {
-      switch (mode) {
-        case 'rectangle':
-          gm.enableDraw('rectangle');
-          console.log('[AOI] enableDraw(rectangle) called');
-          break;
-        case 'polygon':
-          gm.enableDraw('polygon');
-          console.log('[AOI] enableDraw(polygon) called');
-          break;
-        case 'circle':
-          gm.enableDraw('circle');
-          console.log('[AOI] enableDraw(circle) called');
-          break;
-        case 'edit':
-          gm.enableGlobalEditMode();
-          break;
-        case 'drag':
-          gm.enableGlobalDragMode();
-          break;
-        case 'delete':
-          gm.enableGlobalRemovalMode();
-          break;
-        case 'cut':
-          gm.enableGlobalCutMode();
-          break;
-        case 'rotate':
-          gm.enableGlobalRotateMode();
-          break;
-      }
-    } catch (err) {
-      console.error('[AOI] Mode activation failed:', mode, err);
+    if (polygons.length > 0) {
+      const geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon =
+        polygons.length === 1
+          ? {type: 'Polygon', coordinates: polygons[0]}
+          : {type: 'MultiPolygon', coordinates: polygons};
+      setAoiGeometry(geometry);
+      setAoiMode('drawn');
     }
-  }, [activeMode, disableAllModes]);
+  }, [editor?.features]);
 
-  // Toggle panel
-  const handleToggle = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const next = !panelActive;
-    setPanelActive(next);
-    if (!next) {
-      disableAllModes();
-      setActiveMode(null);
-      if (drawnFeaturesRef.current.size === 0) {
-        setAoiMode('idle');
-      } else {
-        setAoiMode('drawn');
-      }
-    }
-  }, [panelActive, disableAllModes]);
-
-  // Expose API on window
+  // Expose window.__PALMVIEW_AOI (reads from Kepler editor state)
   useEffect(() => {
     (window as any).__PALMVIEW_AOI = {
       clear: () => {
-        drawnFeaturesRef.current.clear();
         clearAoi();
-        try {
-          const gm = geomanRef.current;
-          const features = gm?.getFeatures?.() || [];
-          features.forEach((f: any) => { try { gm.removeFeature?.(f); } catch (_) {} });
-        } catch (_) {}
       },
-      getGeometries: () => Array.from(drawnFeaturesRef.current.values()),
+      getGeometries: () =>
+        (editor?.features || [])
+          .map((f: any) => f.geometry)
+          .filter(Boolean),
       getFeatureCollection: (): GeoJSON.FeatureCollection => ({
         type: 'FeatureCollection',
-        features: Array.from(drawnFeaturesRef.current.values()).map((g, i) => ({
+        features: (editor?.features || []).map((f: any, i: number) => ({
           type: 'Feature' as const,
           properties: {id: i, source: 'aoi-draw'},
-          geometry: g,
+          geometry: f.geometry,
         })),
       }),
     };
     return () => {
       delete (window as any).__PALMVIEW_AOI;
-      setMapCursor(null); // Cleanup cursor override on unmount
     };
+  }, [editor?.features]);
+
+  // Toggle panel — also activates Kepler's mapDraw control
+  const handleToggle = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const next = !panelActive;
+      setPanelActive(next);
+
+      // Activate/deactivate Kepler's editor menu
+      const isMapDrawActive = mapControls?.mapDraw?.active;
+      if (next && !isMapDrawActive) {
+        onToggleMapControl('mapDraw');
+      } else if (!next && isMapDrawActive) {
+        onToggleMapControl('mapDraw');
+      }
+
+      if (!next) {
+        // Exiting — switch to EDIT mode (select/translate)
+        onSetEditorMode(EDITOR_MODES.EDIT);
+      }
+    },
+    [panelActive, mapControls, onToggleMapControl, onSetEditorMode]
+  );
+
+  // Handle tool click
+  const handleToolClick = useCallback(
+    (mode: string) => {
+      // Ensure mapDraw is active
+      if (!mapControls?.mapDraw?.active) {
+        onToggleMapControl('mapDraw');
+      }
+      onSetEditorMode(mode);
+    },
+    [mapControls, onToggleMapControl, onSetEditorMode]
+  );
+
+  // Handle delete — clears AOI state
+  const handleDelete = useCallback(() => {
+    clearAoi();
   }, []);
 
   return (
@@ -475,11 +275,11 @@ const AoiControl: React.FC<AoiControlProps> = () => {
           {AOI_TOOLS.map(({mode, label, Icon}) => (
             <StyledToolbarItem
               key={mode}
-              $active={activeMode === mode}
+              $active={editor?.mode === mode}
               onClick={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
-                activateMode(mode);
+                handleToolClick(mode);
               }}
             >
               <div style={{width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
@@ -488,10 +288,25 @@ const AoiControl: React.FC<AoiControlProps> = () => {
               <div className="toolbar-item__title">{label}</div>
             </StyledToolbarItem>
           ))}
+          {/* Delete button — only active when a feature is selected */}
+          <StyledToolbarItem
+            $active={false}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              handleDelete();
+            }}
+            style={{opacity: hasFeatures ? 1 : 0.4}}
+          >
+            <div style={{width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+              <DeleteIcon />
+            </div>
+            <div className="toolbar-item__title">Delete</div>
+          </StyledToolbarItem>
         </StyledToolbar>
       ) : null}
       <div style={{position: 'relative'}}>
-        <StatusDot $hasAoi={!!aoiState.geometry} />
+        <StatusDot $hasAoi={hasFeatures} />
         <MapControlButton
           className={classnames('map-control-button', 'toggle-aoi', {isActive: panelActive})}
           onClick={handleToggle}

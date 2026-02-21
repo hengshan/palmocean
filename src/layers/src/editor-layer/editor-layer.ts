@@ -7,7 +7,11 @@ import {
   DrawPolygonMode,
   TranslateMode,
   CompositeMode,
-  DrawRectangleMode
+  DrawRectangleMode,
+  DrawCircleFromCenterMode,
+  DrawPolygonByDraggingMode,
+  RotateMode,
+  ScaleMode
 } from '@nebula.gl/edit-modes';
 import {PathStyleExtension} from '@deck.gl/extensions';
 
@@ -63,6 +67,14 @@ export function getEditorLayer({
     if (editorMode === EDITOR_MODES.DRAW_POLYGON) mode = DrawPolygonMode;
     // @ts-ignore
     else if (editorMode === EDITOR_MODES.DRAW_RECTANGLE) mode = DrawRectangleMode;
+    // @ts-ignore
+    else if (editorMode === EDITOR_MODES.DRAW_CIRCLE) mode = DrawCircleFromCenterMode;
+    // @ts-ignore
+    else if (editorMode === EDITOR_MODES.DRAW_FREEHAND) mode = DrawPolygonByDraggingMode;
+    // @ts-ignore
+    else if (editorMode === EDITOR_MODES.ROTATE) mode = RotateMode;
+    // @ts-ignore
+    else if (editorMode === EDITOR_MODES.SCALE) mode = ScaleMode;
   }
 
   // @ts-ignore
@@ -103,6 +115,8 @@ export function getEditorLayer({
         case EDIT_TYPES.ADD_POSITION:
         case EDIT_TYPES.MOVE_POSITION:
         case EDIT_TYPES.TRANSLATING:
+        case EDIT_TYPES.ROTATED:
+        case EDIT_TYPES.SCALED:
           onSetFeatures(updatedData.features);
           break;
         default:

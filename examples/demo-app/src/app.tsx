@@ -230,7 +230,7 @@ const App = props => {
   /**
    * Capture mapbox map instance via Kepler's official getMapboxRef prop.
    * Stored on window.__PALMVIEW_MAP for Data Tab raster layer operations
-   * and future Geoman AOI integration. (Council #99 Method C)
+   * and AOI integration via Nebula.gl editor. (Council #99 Method C)
    */
   const handleGetMapboxRef = useCallback((mapbox, index) => {
     if (mapbox) {

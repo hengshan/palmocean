@@ -16,5 +16,7 @@ export const EDIT_TYPES = {
   ADD_POSITION: 'addPosition',
   MOVE_POSITION: 'movePosition',
   TRANSLATING: 'translating',
-  ADD_FEATURE: 'addFeature'
+  ADD_FEATURE: 'addFeature',
+  ROTATED: 'rotated',
+  SCALED: 'scaled'
 };
