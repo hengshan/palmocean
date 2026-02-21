@@ -102,6 +102,7 @@
   ],
   "dependencies": {
     "@deck.gl/mapbox": "^8.9.27",
+    "@geoman-io/maplibre-geoman-free": "^0.6.3",
     "@hubble.gl/core": "1.4.0",
     "@hubble.gl/react": "1.4.0",
     "@kepler.gl/components": "3.2.5",
