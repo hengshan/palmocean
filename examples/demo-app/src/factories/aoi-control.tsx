@@ -147,23 +147,7 @@ const RotateIcon = () => (
   </svg>
 );
 
-// ── Geoman dark theme CSS ────────────────────────────
-
-const GEOMAN_HIDE_CSS = `
-/* Hide Geoman native toolbar — we use Kepler ToolbarItems instead */
-.geoman-controls,
-.maplibregl-ctrl-top-left .maplibregl-ctrl-group {
-  display: none !important;
-}
-`;
-
-function injectHideCSS() {
-  if (document.getElementById('geoman-hide-native')) return;
-  const style = document.createElement('style');
-  style.id = 'geoman-hide-native';
-  style.textContent = GEOMAN_HIDE_CSS;
-  document.head.appendChild(style);
-}
+// No CSS hack needed — Geoman native UI disabled via controlsUiEnabledByDefault: false
 
 // ── Geometry helpers ─────────────────────────────────
 
@@ -257,10 +241,31 @@ const AoiControl: React.FC<AoiControlProps> = () => {
     try {
       const {Geoman} = await import('@geoman-io/maplibre-geoman-free');
       await import('@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css');
-      injectHideCSS(); // Always hide native toolbar
 
-      const gm = new Geoman(map, {controls: {helper: true}});
+      // Initialize Geoman with NO native toolbar UI — we drive it via Kepler ToolbarItems
+      const gm = new Geoman(map, {
+        settings: {
+          controlsUiEnabledByDefault: false,  // No native buttons, just the drawing engine
+        },
+      });
       geomanRef.current = gm;
+
+      // Wait for Geoman to be fully ready
+      const onReady = () => {
+        console.log('[AOI] Geoman engine ready (no native toolbar, using Kepler UI)');
+      };
+      map.on('gm:loaded', onReady);
+
+      // Fallback: poll until gm is responsive
+      let polls = 0;
+      const poller = setInterval(() => {
+        polls++;
+        if (gm.enableDraw) {
+          clearInterval(poller);
+          console.log('[AOI] Geoman API available (poll attempt', polls, ')');
+        }
+        if (polls > 30) clearInterval(poller);
+      }, 500);
 
       // Events
       map.on('gm:create', (e: any) => {
@@ -340,17 +345,21 @@ const AoiControl: React.FC<AoiControlProps> = () => {
     }
 
     setActiveMode(mode);
+    console.log('[AOI] Activating mode:', mode);
 
     try {
       switch (mode) {
         case 'rectangle':
           gm.enableDraw('rectangle');
+          console.log('[AOI] enableDraw(rectangle) called');
           break;
         case 'polygon':
           gm.enableDraw('polygon');
+          console.log('[AOI] enableDraw(polygon) called');
           break;
         case 'circle':
           gm.enableDraw('circle');
+          console.log('[AOI] enableDraw(circle) called');
           break;
         case 'edit':
           gm.enableGlobalEditMode();
@@ -369,7 +378,7 @@ const AoiControl: React.FC<AoiControlProps> = () => {
           break;
       }
     } catch (err) {
-      console.warn('[AOI] Mode activation failed:', mode, err);
+      console.error('[AOI] Mode activation failed:', mode, err);
     }
   }, [activeMode, disableAllModes]);
 
