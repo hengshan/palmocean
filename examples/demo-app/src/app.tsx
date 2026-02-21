@@ -49,7 +49,7 @@ import {CLOUD_PROVIDERS} from './cloud-providers';
 import {Panel, PanelGroup, PanelResizeHandle} from 'react-resizable-panels';
 
 import PalmViewCustomPanelsFactory from './factories/custom-panels';
-import AoiToolbar from './palmview/components/aoi-toolbar';
+// AoiToolbar is now registered as a Kepler MapControl action component (see factories/aoi-control.tsx)
 
 const {CustomPanelsFactory} = require('@kepler.gl/components');
 const KeplerGl = require('@kepler.gl/components').injectComponents([
@@ -690,7 +690,6 @@ const App = props => {
                             />
                           )}
                         </AutoSizer>
-                        <AoiToolbar />
                       </div>
                     </Panel>
 
