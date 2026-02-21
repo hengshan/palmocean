@@ -49,6 +49,7 @@ import {CLOUD_PROVIDERS} from './cloud-providers';
 import {Panel, PanelGroup, PanelResizeHandle} from 'react-resizable-panels';
 
 import PalmViewCustomPanelsFactory from './factories/custom-panels';
+import AoiToolbar from './palmview/components/aoi-toolbar';
 
 const {CustomPanelsFactory} = require('@kepler.gl/components');
 const KeplerGl = require('@kepler.gl/components').injectComponents([
@@ -669,25 +670,28 @@ const App = props => {
                 <Panel defaultSize={isAiAssistantPanelOpen ? 70 : 100}>
                   <PanelGroup direction="vertical">
                     <Panel defaultSize={isSqlPanelOpen ? 60 : 100}>
-                      <AutoSizer>
-                        {({height, width}) => (
-                          <KeplerGl
-                            mapboxApiAccessToken={CLOUD_PROVIDERS_CONFIGURATION.MAPBOX_TOKEN}
-                            id="map"
-                            appName="PalmView"
-                            getState={keplerGlGetState}
-                            width={width}
-                            height={height}
-                            cloudProviders={CLOUD_PROVIDERS}
-                            localeMessages={messages}
-                            onExportToCloudSuccess={onExportFileSuccess}
-                            onLoadCloudMapSuccess={onLoadCloudMapSuccess}
-                            featureFlags={DEFAULT_FEATURE_FLAGS}
-                            onViewStateChange={onViewStateChange}
-                            getMapboxRef={handleGetMapboxRef}
-                          />
-                        )}
-                      </AutoSizer>
+                      <div style={{position: 'relative', width: '100%', height: '100%'}}>
+                        <AutoSizer>
+                          {({height, width}) => (
+                            <KeplerGl
+                              mapboxApiAccessToken={CLOUD_PROVIDERS_CONFIGURATION.MAPBOX_TOKEN}
+                              id="map"
+                              appName="PalmView"
+                              getState={keplerGlGetState}
+                              width={width}
+                              height={height}
+                              cloudProviders={CLOUD_PROVIDERS}
+                              localeMessages={messages}
+                              onExportToCloudSuccess={onExportFileSuccess}
+                              onLoadCloudMapSuccess={onLoadCloudMapSuccess}
+                              featureFlags={DEFAULT_FEATURE_FLAGS}
+                              onViewStateChange={onViewStateChange}
+                              getMapboxRef={handleGetMapboxRef}
+                            />
+                          )}
+                        </AutoSizer>
+                        <AoiToolbar />
+                      </div>
                     </Panel>
 
                     {isSqlPanelOpen && (
