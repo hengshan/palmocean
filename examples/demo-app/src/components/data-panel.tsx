@@ -230,6 +230,218 @@ function getThumbnail(item: STACSearchItem): string | null {
   return link?.href || null;
 }
 
+// ─── GEE Types ───────────────────────────────────────
+
+interface GEECollection {
+  id: string;
+  name: string;
+  description?: string;
+  temporal_range?: string;
+}
+
+interface GEESearchResult {
+  id: string;
+  date: string;
+  cloud_cover?: number;
+  bounds?: number[];
+  thumbnail_url?: string;
+  properties?: Record<string, any>;
+}
+
+// ─── GEE Panel ───────────────────────────────────────
+
+const GEEPanel = () => {
+  const [collections, setCollections] = useState<GEECollection[]>([]);
+  const [selectedCollection, setSelectedCollection] = useState('COPERNICUS/S2_SR_HARMONIZED');
+  const [dateFrom, setDateFrom] = useState('2025-01-01');
+  const [dateTo, setDateTo] = useState('2025-12-31');
+  const [maxCloud, setMaxCloud] = useState(30);
+  const [results, setResults] = useState<GEESearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [geeStatus, setGeeStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+  const [loadingThumb, setLoadingThumb] = useState<string | null>(null);
+
+  // Check GEE status + load collections on mount
+  useEffect(() => {
+    fetch(`${API_BASE}/api/v1/data/gee/status`)
+      .then(r => r.json())
+      .then(data => setGeeStatus(data.status === 'connected' ? 'connected' : 'disconnected'))
+      .catch(() => setGeeStatus('disconnected'));
+
+    fetch(`${API_BASE}/api/v1/data/gee/collections`)
+      .then(r => r.json())
+      .then(data => setCollections(Array.isArray(data) ? data : []))
+      .catch(console.error);
+  }, []);
+
+  const handleSearch = useCallback(async () => {
+    const map = (window as any).__PALMVIEW_MAP;
+    if (!map) {
+      setSearchError('Map not ready — please wait for map to load');
+      return;
+    }
+    setSearching(true);
+    setSearchError(null);
+    setResults([]);
+    try {
+      const bounds = map.getBounds();
+      const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+
+      const url = new URL(`${API_BASE}/api/v1/data/gee/search`);
+      url.searchParams.set('collection', selectedCollection);
+      url.searchParams.set('bbox', bbox.join(','));
+      url.searchParams.set('start_date', dateFrom);
+      url.searchParams.set('end_date', dateTo);
+      url.searchParams.set('max_cloud_cover', String(maxCloud));
+      url.searchParams.set('limit', '20');
+
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error(`GEE search failed: ${res.status}`);
+      const data = await res.json();
+      setResults(Array.isArray(data) ? data : data.images || data.results || []);
+    } catch (err: any) {
+      setSearchError(err.message);
+    } finally {
+      setSearching(false);
+    }
+  }, [selectedCollection, dateFrom, dateTo, maxCloud]);
+
+  const handleLoadThumbnail = useCallback(async (item: GEESearchResult) => {
+    const map = (window as any).__PALMVIEW_MAP;
+    if (!map || !item.thumbnail_url) return;
+
+    setLoadingThumb(item.id);
+    try {
+      // Use GEE thumbnail as image overlay on map
+      const bounds = map.getBounds();
+      const west = bounds.getWest(), south = bounds.getSouth();
+      const east = bounds.getEast(), north = bounds.getNorth();
+
+      // If item has bounds, use those; otherwise use current viewport
+      const [w, s, e, n] = item.bounds || [west, south, east, north];
+
+      const sourceId = `gee-${item.id}`;
+      const layerId = `gee-layer-${item.id}`;
+
+      if (map.getSource(sourceId)) {
+        // Already loaded
+        return;
+      }
+
+      map.addSource(sourceId, {
+        type: 'image',
+        url: item.thumbnail_url,
+        coordinates: [[w, n], [e, n], [e, s], [w, s]]
+      });
+      map.addLayer({id: layerId, type: 'raster', source: sourceId});
+      console.log('[GEE] Thumbnail overlay added:', layerId);
+    } catch (err: any) {
+      console.error('[GEE] Load thumbnail failed:', err);
+    } finally {
+      setLoadingThumb(null);
+    }
+  }, []);
+
+  if (geeStatus === 'checking') {
+    return <EmptyMsg>⏳ Checking GEE connection...</EmptyMsg>;
+  }
+  if (geeStatus === 'disconnected') {
+    return <EmptyMsg>⚠️ GEE service not available. Please check backend configuration.</EmptyMsg>;
+  }
+
+  return (
+    <>
+      <Section>
+        <SectionTitle>🌍 Google Earth Engine</SectionTitle>
+        <Badge color="#22c55e">✓ Connected</Badge>
+
+        <div style={{height: 8}} />
+
+        <Label>Collection</Label>
+        <Select value={selectedCollection} onChange={e => setSelectedCollection(e.target.value)}>
+          {collections.map(c => (
+            <option key={c.id} value={c.id}>{c.name || c.id}</option>
+          ))}
+        </Select>
+
+        <div style={{height: 6}} />
+
+        <Row>
+          <div style={{flex: 1}}>
+            <Label>From</Label>
+            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+          </div>
+          <div style={{flex: 1}}>
+            <Label>To</Label>
+            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+          </div>
+        </Row>
+
+        <div style={{height: 6}} />
+
+        <Label>Max Cloud Cover: {maxCloud}%</Label>
+        <SliderRow>
+          <Slider
+            type="range" min={0} max={100}
+            value={maxCloud}
+            onChange={e => setMaxCloud(Number(e.target.value))}
+          />
+          <Muted>{maxCloud}%</Muted>
+        </SliderRow>
+      </Section>
+
+      <Btn primary onClick={handleSearch} disabled={searching} style={{width: '100%'}}>
+        {searching ? '🔍 Searching GEE...' : '📍 Search Current View (GEE)'}
+      </Btn>
+
+      {searchError && <Muted style={{color: '#F9042C'}}>⚠️ {searchError}</Muted>}
+
+      {results.length > 0 && (
+        <Section>
+          <SectionTitle>🌍 Results ({results.length})</SectionTitle>
+          {results.map(item => {
+            const cc = item.cloud_cover;
+            return (
+              <ResultCard key={item.id}>
+                {item.thumbnail_url ? (
+                  <Thumb src={item.thumbnail_url} alt={item.id} />
+                ) : (
+                  <ThumbPlaceholder>🌍</ThumbPlaceholder>
+                )}
+                <div style={{flex: 1, minWidth: 0}}>
+                  <div style={{fontWeight: 500, fontSize: 11, color: '#D3D8E0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+                    {item.id}
+                  </div>
+                  <div style={{display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap'}}>
+                    <Badge>📅 {item.date}</Badge>
+                    {cc != null && (
+                      <Badge color={cc < 10 ? '#22c55e' : cc < 30 ? '#eab308' : '#F9042C'}>
+                        ☁️ {Math.round(cc)}%
+                      </Badge>
+                    )}
+                  </div>
+                  <Row style={{marginTop: 6}}>
+                    {item.thumbnail_url && (
+                      <Btn small primary onClick={() => handleLoadThumbnail(item)} disabled={loadingThumb === item.id}>
+                        {loadingThumb === item.id ? '⏳...' : '🗺️ Preview on Map'}
+                      </Btn>
+                    )}
+                  </Row>
+                </div>
+              </ResultCard>
+            );
+          })}
+        </Section>
+      )}
+
+      {!searching && results.length === 0 && !searchError && (
+        <EmptyMsg>Navigate to an area of interest, then search. GEE will find imagery for the current map view.</EmptyMsg>
+      )}
+    </>
+  );
+};
+
 // ─── Data Panel Content ──────────────────────────────
 
 const DataPanelContent = () => {
@@ -408,7 +620,7 @@ const DataPanelContent = () => {
       </SourceToggle>
 
       {source === 'gee' ? (
-        <EmptyMsg>🌍 GEE integration coming soon. Use STAC for now.</EmptyMsg>
+        <GEEPanel />
       ) : (
         <>
           {/* Provider + Collection */}

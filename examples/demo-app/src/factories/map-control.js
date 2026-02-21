@@ -82,7 +82,7 @@ function CustomMapControlFactory(
     return (
       <StyledMapControlOverlay top={props.top} rightPanelVisible={showEffects}>
         <StyledMapControlPanel>
-          {<BannerMapPanel {...props} />}
+          {/* BannerMapPanel removed — PalmView branding, no kepler.gl ads */}
           {!props.isExport && props.currentSample ? <SampleMapPanel {...props} /> : null}
           <MapControl {...props} top={0} actionComponents={actionComponents} />
         </StyledMapControlPanel>
