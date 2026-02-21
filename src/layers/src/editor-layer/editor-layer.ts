@@ -24,8 +24,60 @@ import {EDIT_TYPES} from './constants';
 import {LINE_STYLE, FEATURE_STYLE, EDIT_HANDLE_STYLE} from './feature-styles';
 import {ModifyModeExtended} from './modify-mode-extended';
 import {isDrawingActive} from './editor-layer-utils';
+import turfBearing from '@turf/bearing';
+import turfCentroid from '@turf/centroid';
+import turfArea from '@turf/area';
 
 const DEFAULT_COMPOSITE_MODE = new CompositeMode([new TranslateMode(), new ModifyModeExtended()]);
+
+// State for tracking transform feedback (rotation angle / scale factor)
+const transformState: {
+  originalFeatures: Feature[] | null;
+  originalArea: number;
+  originalBearing: number;
+} = {
+  originalFeatures: null,
+  originalArea: 0,
+  originalBearing: 0
+};
+
+function getRefBearing(features: Feature[], indexes: number[]): number {
+  if (!indexes.length || !features.length) return 0;
+  const selected = indexes.map(i => features[i]).filter(Boolean);
+  if (!selected.length) return 0;
+  const fc = {type: 'FeatureCollection' as const, features: selected};
+  const c = turfCentroid(fc as any);
+  // Use first coordinate of first selected feature as reference point
+  const firstCoord = getFirstCoord(selected[0]);
+  if (!firstCoord) return 0;
+  return turfBearing(c.geometry.coordinates as [number, number], firstCoord as [number, number]);
+}
+
+function getFirstCoord(feature: Feature): number[] | null {
+  const g = feature?.geometry;
+  if (!g) return null;
+  let coords = (g as any).coordinates;
+  while (Array.isArray(coords) && Array.isArray(coords[0]) && Array.isArray(coords[0][0])) {
+    coords = coords[0];
+  }
+  if (Array.isArray(coords) && Array.isArray(coords[0])) return coords[0];
+  if (Array.isArray(coords) && typeof coords[0] === 'number') return coords;
+  return null;
+}
+
+function getTotalArea(features: Feature[], indexes: number[]): number {
+  if (!indexes.length) return 0;
+  const selected = indexes.map(i => features[i]).filter(Boolean);
+  let total = 0;
+  for (const f of selected) {
+    try {
+      total += turfArea(f as any);
+    } catch (_e) {
+      /* skip non-polygon */
+    }
+  }
+  return total || 1;
+}
 
 export type GetEditorLayerProps = {
   editorMenuActive: boolean;
@@ -118,8 +170,47 @@ export function getEditorLayer({
         case EDIT_TYPES.ADD_POSITION:
         case EDIT_TYPES.MOVE_POSITION:
         case EDIT_TYPES.TRANSLATING:
+          onSetFeatures(updatedData.features);
+          break;
+        case EDIT_TYPES.ROTATING: {
+          if (!transformState.originalFeatures) {
+            transformState.originalFeatures = JSON.parse(
+              JSON.stringify(featureCollection.features)
+            );
+            transformState.originalBearing = getRefBearing(
+              featureCollection.features,
+              selectedFeatureIndexes
+            );
+          }
+          const newBearing = getRefBearing(updatedData.features, selectedFeatureIndexes);
+          let angle = newBearing - transformState.originalBearing;
+          // Normalize to -180..180
+          if (angle > 180) angle -= 360;
+          if (angle < -180) angle += 360;
+          (window as any).__PALMVIEW_TRANSFORM_INFO = {type: 'rotate', angle};
+          onSetFeatures(updatedData.features);
+          break;
+        }
+        case EDIT_TYPES.SCALING: {
+          if (!transformState.originalFeatures) {
+            transformState.originalFeatures = JSON.parse(
+              JSON.stringify(featureCollection.features)
+            );
+            transformState.originalArea = getTotalArea(
+              featureCollection.features,
+              selectedFeatureIndexes
+            );
+          }
+          const newArea = getTotalArea(updatedData.features, selectedFeatureIndexes);
+          const factor = Math.sqrt(newArea / transformState.originalArea);
+          (window as any).__PALMVIEW_TRANSFORM_INFO = {type: 'scale', factor};
+          onSetFeatures(updatedData.features);
+          break;
+        }
         case EDIT_TYPES.ROTATED:
         case EDIT_TYPES.SCALED:
+          (window as any).__PALMVIEW_TRANSFORM_INFO = null;
+          transformState.originalFeatures = null;
           onSetFeatures(updatedData.features);
           break;
         default:

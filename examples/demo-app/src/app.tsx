@@ -29,6 +29,7 @@ import {replaceLoadDataModal} from './factories/load-data-modal';
 import {replaceMapControl} from './factories/map-control';
 import {replacePanelHeader} from './factories/panel-header';
 import {setAoiGeometry, setAoiMode, clearAoi} from './palmview/raster-state';
+import TransformFeedback from './components/transform-feedback';
 import {CLOUD_PROVIDERS_CONFIGURATION, DEFAULT_FEATURE_FLAGS} from './constants/default-settings';
 import {messages} from './constants/localization';
 
@@ -703,6 +704,7 @@ const App = props => {
         //   node ? (this.root = node) : null;
         // }}
         >
+          <TransformFeedback />
           <ScreenshotWrapper
             startScreenCapture={props.demo.aiAssistant.screenshotToAsk.startScreenCapture}
             setScreenCaptured={_setScreenCaptured}

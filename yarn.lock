@@ -5205,9 +5205,12 @@ __metadata:
     "@mapbox/geojson-normalize": "npm:0.0.1"
     "@nebula.gl/edit-modes": "npm:1.0.2-alpha.1"
     "@nebula.gl/layers": "npm:1.0.2-alpha.1"
+    "@turf/area": "npm:^6.5.0"
     "@turf/bbox": "npm:^6.0.1"
+    "@turf/bearing": "npm:^6.5.0"
     "@turf/boolean-within": "npm:^6.0.1"
     "@turf/center": "npm:^6.0.1"
+    "@turf/centroid": "npm:^6.5.0"
     "@turf/helpers": "npm:^6.1.4"
     "@types/geojson": "npm:^7946.0.8"
     "@types/keymirror": "npm:^0.1.1"
@@ -9267,6 +9270,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@turf/area@npm:^6.5.0":
+  version: 6.5.0
+  resolution: "@turf/area@npm:6.5.0"
+  dependencies:
+    "@turf/helpers": "npm:^6.5.0"
+    "@turf/meta": "npm:^6.5.0"
+  checksum: 10c0/2b34e8d371bc65594e5f3c92149509e56bcad5bbf17e8ab8222fd6510186dcbea9fbedbde2d1fc02e6ecf69142fae748aa0bf852e0bd4c483c0254fc97ca6194
+  languageName: node
+  linkType: hard
+
 "@turf/bbox-polygon@npm:>=4.0.0":
   version: 7.0.0
   resolution: "@turf/bbox-polygon@npm:7.0.0"
@@ -9339,6 +9352,16 @@ __metadata:
     "@turf/invariant": "npm:^7.0.0"
     tslib: "npm:^2.6.2"
   checksum: 10c0/76c83c25345fb2a6ae022f5769d33b029c903c288e6a599e7c184cee1e40e6b588a2202cad3ca4c6b4ea274fa2f2f4ff5fe296442acc473dee40d04469c9428a
+  languageName: node
+  linkType: hard
+
+"@turf/bearing@npm:^6.5.0":
+  version: 6.5.0
+  resolution: "@turf/bearing@npm:6.5.0"
+  dependencies:
+    "@turf/helpers": "npm:^6.5.0"
+    "@turf/invariant": "npm:^6.5.0"
+  checksum: 10c0/9c6d5bb85289fee408592ffe8768987512dad1793130364bd43cd8a420ec1ea7b376ce35e22c3fdd91c051eaaa70de4682709111c5cf0ca93681fe9ef238a406
   languageName: node
   linkType: hard
 
@@ -9635,6 +9658,16 @@ __metadata:
     "@turf/meta": "npm:^7.0.0"
     tslib: "npm:^2.6.2"
   checksum: 10c0/26c389151c30a7c912b98b0b5d67f466b34bbe72f10d542a88c9bb8b712e26300cbfd55b77de40a2610856fb88180d5ff319d0483e2ed23396eb53d072f16af8
+  languageName: node
+  linkType: hard
+
+"@turf/centroid@npm:^6.5.0":
+  version: 6.5.0
+  resolution: "@turf/centroid@npm:6.5.0"
+  dependencies:
+    "@turf/helpers": "npm:^6.5.0"
+    "@turf/meta": "npm:^6.5.0"
+  checksum: 10c0/d00279918e4ebb3bf936b6c2e3c4e57289589bb2217b7f6edab0c533d440b065ec56fa1a0b4dacba006457d6631e2a63dda87b328dd831ee2527875ead3191bd
   languageName: node
   linkType: hard
 
