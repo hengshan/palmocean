@@ -226,6 +226,19 @@ const App = props => {
    * Update map boundary when view state changes, used by ai-assistant to
    * get data from vector tiles when map boundary changes
    */
+  /**
+   * Capture mapbox map instance via Kepler's official getMapboxRef prop.
+   * Stored on window.__PALMVIEW_MAP for Data Tab raster layer operations
+   * and future Geoman AOI integration. (Council #99 Method C)
+   */
+  const handleGetMapboxRef = useCallback((mapbox, index) => {
+    if (mapbox) {
+      const map = mapbox.getMap();
+      (window as any).__PALMVIEW_MAP = map;
+      console.log('[PalmView] mapbox ref captured, index:', index);
+    }
+  }, []);
+
   const onViewStateChange = useCallback(
     viewState => {
       const viewport = new WebMercatorViewport(viewState);
@@ -671,6 +684,7 @@ const App = props => {
                             onLoadCloudMapSuccess={onLoadCloudMapSuccess}
                             featureFlags={DEFAULT_FEATURE_FLAGS}
                             onViewStateChange={onViewStateChange}
+                            getMapboxRef={handleGetMapboxRef}
                           />
                         )}
                       </AutoSizer>

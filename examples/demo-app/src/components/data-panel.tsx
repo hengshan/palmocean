@@ -322,49 +322,56 @@ const DataPanelContent = () => {
   // Load raster to map via mapbox raster source
   // Kepler can't handle GeoTIFF natively — use mapbox addSource/addLayer (#90)
   const handleLoadToMap = useCallback(async (item: STACSearchItem) => {
+    const map = (window as any).__PALMVIEW_MAP;
+    if (!map) {
+      console.error('[Data] Map ref not available — cannot load raster layer');
+      return;
+    }
+
     setDownloading(item.id);
     try {
-      // 1. Get tile URL from backend
-      const res = await fetch(
-        `${API_BASE}/api/v1/data/stac/${selectedProvider}/${selectedCollection}/${item.id}/tile-url?asset_key=visual`
-      );
-      if (!res.ok) throw new Error(`Failed to get tile URL: ${res.status}`);
-      const data = await res.json();
-      const tileUrl = data.tile_url || data.url;
+      const layerId = `stac-${item.id}-${Date.now()}`;
+      const sourceId = `src-${layerId}`;
 
-      if (!tileUrl) {
-        // Fallback: use COG asset href directly as image overlay
+      // 1. Try tile URL from backend
+      let loaded = false;
+      try {
+        const res = await fetch(
+          `${API_BASE}/api/v1/data/stac/${selectedProvider}/${selectedCollection}/${item.id}/tile-url?asset_key=visual`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const tileUrl = data.tile_url || data.url;
+          if (tileUrl) {
+            map.addSource(sourceId, {type: 'raster', tiles: [tileUrl], tileSize: 256});
+            map.addLayer({id: layerId, type: 'raster', source: sourceId});
+            loaded = true;
+            console.log('[Data] Raster tile layer added:', layerId);
+          }
+        }
+      } catch (e) {
+        console.warn('[Data] tile-url fallback:', e);
+      }
+
+      // 2. Fallback: COG asset href as image overlay
+      if (!loaded) {
         const cogHref = item.assets?.visual?.href || item.assets?.['B04']?.href;
         if (cogHref && item.bbox) {
           const [west, south, east, north] = item.bbox;
-          console.log('[Data] Loading as image overlay:', cogHref);
-          // Store layer info — actual mapbox integration needs map ref (TODO #90)
-          const layerId = `stac-${item.id}-${Date.now()}`;
-          setLoadedLayers(prev => [...prev, {id: layerId, itemId: item.id, visible: true}]);
-          console.log('[Data] Layer registered:', layerId, {
+          map.addSource(sourceId, {
             type: 'image',
             url: cogHref,
             coordinates: [[west,north],[east,north],[east,south],[west,south]]
           });
-          return;
+          map.addLayer({id: layerId, type: 'raster', source: sourceId});
+          loaded = true;
+          console.log('[Data] Image overlay added:', layerId);
         }
-        throw new Error('No tile URL or COG asset available');
       }
 
-      // 2. Register as raster tile layer
-      const layerId = `stac-${item.id}-${Date.now()}`;
+      if (!loaded) throw new Error('No tile URL or COG asset available');
+
       setLoadedLayers(prev => [...prev, {id: layerId, itemId: item.id, visible: true}]);
-
-      console.log('[Data] Raster layer registered:', layerId, {
-        type: 'raster',
-        tiles: [tileUrl],
-        tileSize: 256,
-        bbox: item.bbox,
-      });
-
-      // NOTE: Actual mapbox map.addSource/addLayer requires map instance ref
-      // This will be connected when we get mapbox ref via MapContainerFactory (#90)
-      // For now, log the layer config for debugging
 
     } catch (err: any) {
       console.error('[Data] Load to map failed:', err);
@@ -373,11 +380,19 @@ const DataPanelContent = () => {
     }
   }, [selectedProvider, selectedCollection]);
 
-  // Remove loaded layer
+  // Remove loaded layer from mapbox + state
   const handleRemoveLayer = useCallback((layerId: string) => {
+    const map = (window as any).__PALMVIEW_MAP;
+    if (map) {
+      try {
+        if (map.getLayer(layerId)) map.removeLayer(layerId);
+        const sourceId = `src-${layerId}`;
+        if (map.getSource(sourceId)) map.removeSource(sourceId);
+      } catch (e) {
+        console.warn('[Data] Error removing layer:', e);
+      }
+    }
     setLoadedLayers(prev => prev.filter(l => l.id !== layerId));
-    // TODO: map.removeLayer + map.removeSource when map ref available
-    console.log('[Data] Layer removed:', layerId);
   }, []);
 
   return (
@@ -429,12 +444,31 @@ const DataPanelContent = () => {
             <SectionTitle>🔍 Search Parameters</SectionTitle>
 
             <Label>Bounding Box (west, south, east, north)</Label>
-            <Input
-              value={bboxStr}
-              onChange={e => setBboxStr(e.target.value)}
-              placeholder="103.6,1.2,104.0,1.45"
-            />
-            <Muted>Tip: use map extent for current view</Muted>
+            <Row>
+              <Input
+                style={{flex: 1}}
+                value={bboxStr}
+                onChange={e => setBboxStr(e.target.value)}
+                placeholder="103.6,1.2,104.0,1.45"
+              />
+              <Btn small onClick={() => {
+                const map = (window as any).__PALMVIEW_MAP;
+                if (map) {
+                  const bounds = map.getBounds();
+                  const bbox = [
+                    bounds.getWest().toFixed(4),
+                    bounds.getSouth().toFixed(4),
+                    bounds.getEast().toFixed(4),
+                    bounds.getNorth().toFixed(4),
+                  ].join(',');
+                  setBboxStr(bbox);
+                } else {
+                  console.warn('[Data] Map ref not available yet');
+                }
+              }} title="Use current map view">
+                📍 Current View
+              </Btn>
+            </Row>
 
             <div style={{height: 6}} />
 
