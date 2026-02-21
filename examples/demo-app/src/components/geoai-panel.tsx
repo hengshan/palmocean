@@ -8,9 +8,12 @@ import {
   connectInferenceStream,
   listProjects,
   createProject,
+  getMapState,
+  subscribe,
   type InferenceJobDetail,
   type InferenceJobSubmit,
   type WSInferenceMessage,
+  type AoiState,
 } from '../palmview';
 
 // ─── Styled Components ───────────────────────────────────────
@@ -217,7 +220,13 @@ const GeoAiPanelContent = () => {
 
   // Project
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [aoiState, setAoiState] = useState<AoiState>(getMapState().aoiState);
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Subscribe to AOI state from Geoman/raster-state
+  useEffect(() => {
+    return subscribe((s) => setAoiState(s.aoiState));
+  }, []);
 
   // Init project
   useEffect(() => {
@@ -256,13 +265,16 @@ const GeoAiPanelContent = () => {
     setActiveJob(null);
 
     const target = selectedTarget || customTarget;
+    if (!aoiState.geometry) {
+      setSubmitError('Please draw an AOI on the map first (click the crosshair button)');
+      setIsSubmitting(false);
+      return;
+    }
+
     const job: InferenceJobSubmit = {
       project_id: projectId,
       task_type: taskCategory,
-      aoi: {
-        type: 'Polygon',
-        coordinates: [[[103.8, 1.33], [103.85, 1.33], [103.85, 1.37], [103.8, 1.37], [103.8, 1.33]]]
-      },
+      aoi: aoiState.geometry,
       params: {target},
     };
 
@@ -372,9 +384,33 @@ const GeoAiPanelContent = () => {
         )}
       </StyledSection>
 
+      {/* AOI Status */}
+      <StyledSection>
+        <StyledSectionTitle>📍 AOI (Area of Interest)</StyledSectionTitle>
+        {aoiState.geometry ? (
+          <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+            <span style={{color: '#4ecdc4', fontSize: 12}}>
+              ✅ {aoiState.geometry.type === 'MultiPolygon'
+                ? `${aoiState.geometry.coordinates.length} polygons selected`
+                : 'AOI defined'}
+            </span>
+            <StyledButton
+              style={{padding: '2px 8px', fontSize: 10}}
+              onClick={() => {
+                (window as any).__PALMVIEW_AOI?.clear?.();
+              }}
+            >✕ Clear</StyledButton>
+          </div>
+        ) : (
+          <EmptyState>
+            Click the ⊞ button on the map to draw your analysis area
+          </EmptyState>
+        )}
+      </StyledSection>
+
       {/* Run Button — becomes progress indicator while running */}
       <RunButton
-        disabled={!taskCategory || (!selectedTarget && !customTarget) || isSubmitting || !!isRunning}
+        disabled={!taskCategory || (!selectedTarget && !customTarget) || !aoiState.geometry || isSubmitting || !!isRunning}
         onClick={handleRunAnalysis}
         style={isRunning ? {background: 'rgba(108, 191, 183, 0.3)', position: 'relative', overflow: 'hidden'} : undefined}
       >
