@@ -110,42 +110,47 @@ const AoiToolbar: React.FC<AoiToolbarProps> = ({map: mapProp}) => {
       try {
         // Dynamic import to avoid SSR issues
         const {Geoman} = await import('@geoman-io/maplibre-geoman-free');
+        // Import Geoman CSS for proper rendering
+        await import('@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css');
         if (cancelled) return;
 
-        const gm = new Geoman(map, {
-          // Disable default toolbar — we provide our own
-          controls: {
-            drawMarker: false,
-            drawCircleMarker: false,
-            drawPolyline: false,
-            drawCircle: false,
-            drawText: false,
-            cutPolygon: false,
-            rotateMode: false,
-            splitMode: false,
-            scaleMode: false,
-            pinMode: false,
-            snapGuidesMode: false,
-          },
-        });
+        // Initialize Geoman — hide default toolbar, we provide our own
+        const gm = new Geoman(map);
         geomanRef.current = gm;
+
+        // Wait for Geoman to be fully loaded before using draw modes
+        map.on('gm:loaded', () => {
+          if (cancelled) return;
+          console.log('[AOI] Geoman fully loaded');
+
+          // Hide default Geoman toolbar — we use our custom one
+          try {
+            gm.setControls({hide: true});
+          } catch (_) {
+            // Controls API may differ, ignore
+          }
+        });
 
         // Listen for draw complete
         map.on('gm:create', (e: any) => {
-          const feature = e.feature || e.layer?.toGeoJSON?.();
-          if (feature?.geometry) {
-            setAoiGeometry(feature.geometry);
+          const feature = e.feature;
+          const geometry = feature?.geometry || e.shape?.geometry;
+          if (geometry) {
+            setAoiGeometry(geometry);
             setDrawMode('none');
-            console.log('[AOI] Created:', JSON.stringify(feature.geometry));
+            // Disable draw after creation
+            try { gm.disableDraw(); } catch (_) {}
+            console.log('[AOI] Created:', JSON.stringify(geometry));
           }
         });
 
         // Listen for edit complete
         map.on('gm:edit', (e: any) => {
-          const feature = e.feature || e.layer?.toGeoJSON?.();
-          if (feature?.geometry) {
-            setAoiGeometry(feature.geometry);
-            console.log('[AOI] Edited:', JSON.stringify(feature.geometry));
+          const feature = e.feature;
+          const geometry = feature?.geometry || e.shape?.geometry;
+          if (geometry) {
+            setAoiGeometry(geometry);
+            console.log('[AOI] Edited:', JSON.stringify(geometry));
           }
         });
 
@@ -190,11 +195,11 @@ const AoiToolbar: React.FC<AoiToolbarProps> = ({map: mapProp}) => {
     switch (mode) {
       case 'rectangle':
         setAoiMode('drawing');
-        gm.enableDraw('Rectangle');
+        gm.enableDraw('rectangle');
         break;
       case 'polygon':
         setAoiMode('drawing');
-        gm.enableDraw('Polygon');
+        gm.enableDraw('polygon');
         break;
       case 'edit':
         setAoiMode('editing');
@@ -211,11 +216,16 @@ const AoiToolbar: React.FC<AoiToolbarProps> = ({map: mapProp}) => {
       try {
         gm.disableDraw();
         gm.disableGlobalEditMode();
-        // Remove all Geoman layers
+        // Remove all Geoman features
         const map = mapRef.current;
-        if (map) {
-          const layers = map.gm?.getLayers?.() || [];
-          layers.forEach((l: any) => l.remove?.());
+        if (map && map.gm) {
+          try {
+            const features = map.gm.features?.getFeatures?.() || [];
+            features.forEach((f: any) => map.gm.features.removeFeature(f));
+          } catch (_) {
+            // Fallback: try alternative API
+            try { map.gm.removeAll?.(); } catch (_2) {}
+          }
         }
       } catch (_) { /* ignore */ }
     }
