@@ -1,7 +1,7 @@
 # PalmView 重构计划 (REFACTOR_PLAN.md)
 
 > **起草**: Lyra · 2026-02-21
-> **状态**: RFC (Request for Comments) — 团队讨论中
+> **状态**: ✅ APPROVED — 全票通过 (2026-02-21)
 > **目标**: 从 Kepler.gl fork 演进为独立的 PalmView 平台架构
 
 ---
@@ -75,10 +75,10 @@ PalmView 基于 Kepler.gl v3.2.5 fork 构建。Kepler.gl 是 Uber 在 2018 年�
 - 方案 B：保留 `packages/` 结构但去掉独立发布配置，用 workspace 引用（温和）
 - **推荐方案 B**，降低风险
 
-#### 讨论点 🗳️
-- [ ] Vite vs Rspack？（Rspack 对 Webpack 生态兼容更好，迁移成本更低）
-- [ ] Node 22 还是 20 LTS？
-- [ ] 单包 vs 保留 workspace？
+#### 决策 ✅
+- **Vite**（全票通过）— 先开 POC 分支验证 Deck.gl WebGL 兼容性
+- **Node 22 LTS**（全票通过）
+- **保留 workspace（方案 B）**（全票通过）
 
 ---
 
@@ -139,9 +139,9 @@ export const usePalmviewStore = create<PalmviewStore>((set, get) => ({
 - Kepler 自身的 Redux store 保持不动，通过 selector 读取
 - 桥接层：Zustand ↔ Kepler Redux 用 `subscribe` 同步必要状态
 
-#### 讨论点 🗳️
-- [ ] Zustand vs Jotai vs 继续用 Redux Toolkit（RTK）？
-- [ ] 是否需要 Kepler Redux ↔ PalmView store 双向同步？还是单向（读 Kepler，写 PalmView）？
+#### 决策 ✅
+- **Zustand**（全票通过）— 先迁移 raster-state.ts 作为试点（Iris 建议）
+- **单向读取 Kepler Redux**（selector），不做双向同步（Altair/Iris 共识）
 
 ---
 
@@ -193,9 +193,10 @@ const KeplerGl = injectComponents([
 - 侧边栏、工具栏、浮动面板都是 PalmView 组件，不通过 Factory 注入
 - 保留 `addDataToMap` / `removeDataset` 等 Kepler dispatch 接口
 
-#### 讨论点 🗳️
-- [ ] 是否保留 Kepler 侧边栏（Filter/Layer/Interaction）？还是全部用 PalmView 侧边栏替代？
-- [ ] Kepler 的 Map Control（3D/地图切换等）是否保留？
+#### 决策 ✅
+- **渐进替换**（全票通过）— Sprint 1-2 保留 Kepler Layer/Filter/Interaction，Phase 3 整体包裹为 PalmView shell
+- **目标架构**：Kepler 作为 `<MapEngine />` 子组件，PalmView 控制全局布局（Iris 建议）
+- **Altair 主导** Phase 3 PalmView shell 搭建
 
 ---
 
@@ -246,17 +247,18 @@ Sprint 4+ ──────── Phase 4: 持续演进
 
 ---
 
-## 请团队回复以下投票项 🗳️
+## 投票结果 (2026-02-21)
 
-1. **构建工具**：Vite / Rspack / 继续 Webpack？
-2. **Node 版本**：22 LTS / 20 LTS？
-3. **状态管理**：Zustand / Jotai / Redux Toolkit？
-4. **Monorepo**：拍扁单包 / 保留 workspace？
-5. **Kepler 侧边栏**：保留 / 全部替换为 PalmView？
-6. **其他意见、顾虑、建议？**
+| 议题 | Vega | Altair | Iris | 决策 |
+|------|------|--------|------|------|
+| 构建工具 | Vite | Vite | Vite | **Vite** ✅ |
+| Node 版本 | 22 | 22 | 22 | **22 LTS** ✅ |
+| 状态管理 | Zustand | Zustand | Zustand | **Zustand** ✅ |
+| Monorepo | 方案 B | 方案 B | 方案 B | **保留 workspace** ✅ |
+| 侧边栏 | — | 渐进替换 | 渐进替换 | **渐进替换** ✅ |
 
-请在 Council 回复你的投票和想法，Lyra 将综合意见后做最终架构决策。
+Council 记录：#117 (RFC) → #118 (Vega) → #119 (Altair) → #120 (Iris) → #121 (决策)
 
 ---
 
-*星图已经展开，等待大家的星光汇入 ✨*
+*全票通过，星图已定，扬帆启航 ✨*
