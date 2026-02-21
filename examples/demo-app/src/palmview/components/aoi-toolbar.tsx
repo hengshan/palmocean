@@ -1,7 +1,8 @@
 /**
- * AOI Toolbar — Floating map control for drawing Areas of Interest
- * Uses @geoman-io/maplibre-geoman-free for draw/edit on the map.
- * Author: IRIS · 2026-02-21
+ * AOI Manager — Initializes Geoman on the map and manages AOI state.
+ * Geoman's native toolbar provides all draw/edit tools (snap, rotate, cut, etc.)
+ * This component only handles: initialization, toolbar toggle, AOI state capture.
+ * Author: Lyra · 2026-02-21
  */
 
 import React, {useEffect, useState, useCallback, useRef} from 'react';
@@ -11,263 +12,200 @@ import type {AoiState} from '../raster-state';
 
 // ── Styles ───────────────────────────────────────────
 
-const ToolbarContainer = styled.div`
-  position: absolute;
-  top: 80px;
-  right: 12px;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: rgba(36, 39, 48, 0.92);
-  border-radius: 8px;
-  padding: 6px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
-`;
-
-const ToolButton = styled.button<{$active?: boolean}>`
-  width: 36px;
-  height: 36px;
+const ToggleButton = styled.button<{$active?: boolean}>`
+  /* This button goes into Kepler's map-control toolbar area */
+  width: 29px;
+  height: 29px;
   border: none;
-  border-radius: 6px;
-  background: ${(p) => (p.$active ? '#4B8BF5' : 'transparent')};
+  border-radius: 4px;
+  background: ${(p) => (p.$active ? '#1FBF6E' : 'rgba(36, 39, 48, 0.9)')};
   color: ${(p) => (p.$active ? '#fff' : '#a0a7b4')};
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  transition: background 0.15s, color 0.15s;
+  font-size: 14px;
+  transition: background 0.2s, color 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 
   &:hover {
-    background: ${(p) => (p.$active ? '#4B8BF5' : 'rgba(255,255,255,0.08)')};
+    background: ${(p) => (p.$active ? '#17a85e' : 'rgba(255,255,255,0.12)')};
     color: #fff;
   }
 `;
 
-const Divider = styled.div`
-  height: 1px;
-  background: rgba(255, 255, 255, 0.1);
-  margin: 2px 0;
+const AoiToggleContainer = styled.div`
+  position: absolute;
+  top: 130px;
+  right: 12px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 `;
 
-const StatusBadge = styled.div<{$hasAoi: boolean}>`
-  font-size: 10px;
-  text-align: center;
-  color: ${(p) => (p.$hasAoi ? '#4ecdc4' : '#a0a7b4')};
-  padding: 2px 0 0;
-  user-select: none;
+const StatusDot = styled.span<{$hasAoi: boolean}>`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: ${(p) => (p.$hasAoi ? '#4ecdc4' : 'transparent')};
+  border: 1px solid ${(p) => (p.$hasAoi ? '#4ecdc4' : 'transparent')};
+  transition: background 0.2s;
 `;
 
-// ── Types ────────────────────────────────────────────
-
-type DrawMode = 'none' | 'rectangle' | 'polygon' | 'edit';
-
-interface AoiToolbarProps {
-  /** Optional: provide map externally; defaults to window.__PALMVIEW_MAP */
-  map?: any;
-}
+// AOI SVG icon (crosshair + rectangle)
+const AoiIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <rect x="3" y="3" width="10" height="10" rx="1" />
+    <line x1="8" y1="0" x2="8" y2="4" />
+    <line x1="8" y1="12" x2="8" y2="16" />
+    <line x1="0" y1="8" x2="4" y2="8" />
+    <line x1="12" y1="8" x2="16" y2="8" />
+  </svg>
+);
 
 // ── Component ────────────────────────────────────────
 
+interface AoiToolbarProps {
+  map?: any;
+}
+
 const AoiToolbar: React.FC<AoiToolbarProps> = ({map: mapProp}) => {
-  const [drawMode, setDrawMode] = useState<DrawMode>('none');
+  const [toolbarVisible, setToolbarVisible] = useState(false);
   const [aoiState, setLocalAoiState] = useState<AoiState>(getMapState().aoiState);
   const geomanRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
+  const geomanLoadedRef = useRef(false);
 
-  // Subscribe to state changes
+  // Subscribe to AOI state changes
   useEffect(() => {
     return subscribe((s) => setLocalAoiState(s.aoiState));
   }, []);
 
-  // Get map instance
+  // Poll for map instance
   useEffect(() => {
-    const m = mapProp || (window as any).__PALMVIEW_MAP;
-    if (m) {
-      mapRef.current = m;
-    } else {
-      // Poll for map availability
-      const interval = setInterval(() => {
-        const m2 = (window as any).__PALMVIEW_MAP;
-        if (m2) {
-          mapRef.current = m2;
-          clearInterval(interval);
-        }
-      }, 500);
-      return () => clearInterval(interval);
-    }
+    const check = () => {
+      const m = mapProp || (window as any).__PALMVIEW_MAP;
+      if (m && !mapRef.current) {
+        mapRef.current = m;
+        initGeoman(m);
+      }
+    };
+    check();
+    const interval = setInterval(check, 500);
+    return () => clearInterval(interval);
   }, [mapProp]);
 
-  // Initialize Geoman when map is ready
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || geomanRef.current) return;
+  // Initialize Geoman
+  const initGeoman = useCallback(async (map: any) => {
+    if (geomanRef.current) return;
 
-    let cancelled = false;
-
-    (async () => {
-      try {
-        // Dynamic import to avoid SSR issues
-        const {Geoman} = await import('@geoman-io/maplibre-geoman-free');
-        // Import Geoman CSS for proper rendering
-        await import('@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css');
-        if (cancelled) return;
-
-        // Initialize Geoman — hide default toolbar, we provide our own
-        const gm = new Geoman(map);
-        geomanRef.current = gm;
-
-        // Wait for Geoman to be fully loaded before using draw modes
-        map.on('gm:loaded', () => {
-          if (cancelled) return;
-          console.log('[AOI] Geoman fully loaded');
-
-          // Hide default Geoman toolbar — we use our custom one
-          try {
-            gm.setControls({hide: true});
-          } catch (_) {
-            // Controls API may differ, ignore
-          }
-        });
-
-        // Listen for draw complete
-        map.on('gm:create', (e: any) => {
-          const feature = e.feature;
-          const geometry = feature?.geometry || e.shape?.geometry;
-          if (geometry) {
-            setAoiGeometry(geometry);
-            setDrawMode('none');
-            // Disable draw after creation
-            try { gm.disableDraw(); } catch (_) {}
-            console.log('[AOI] Created:', JSON.stringify(geometry));
-          }
-        });
-
-        // Listen for edit complete
-        map.on('gm:edit', (e: any) => {
-          const feature = e.feature;
-          const geometry = feature?.geometry || e.shape?.geometry;
-          if (geometry) {
-            setAoiGeometry(geometry);
-            console.log('[AOI] Edited:', JSON.stringify(geometry));
-          }
-        });
-
-        // Listen for remove
-        map.on('gm:remove', () => {
-          clearAoi();
-          setDrawMode('none');
-          console.log('[AOI] Removed');
-        });
-
-        console.log('[AOI] Geoman initialized successfully');
-      } catch (err) {
-        console.error('[AOI] Failed to initialize Geoman:', err);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [mapRef.current]);
-
-  // Handle draw mode changes
-  const activateMode = useCallback((mode: DrawMode) => {
-    const gm = geomanRef.current;
-    if (!gm) return;
-
-    // Deactivate current mode
     try {
-      gm.disableDraw();
-      gm.disableGlobalEditMode();
-    } catch (_) { /* ignore */ }
+      const {Geoman} = await import('@geoman-io/maplibre-geoman-free');
+      await import('@geoman-io/maplibre-geoman-free/dist/maplibre-geoman.css');
 
-    if (mode === drawMode) {
-      // Toggle off
-      setDrawMode('none');
-      setAoiMode('idle');
-      return;
-    }
+      // Initialize with default config — Geoman creates its own toolbar
+      const gm = new Geoman(map);
+      geomanRef.current = gm;
 
-    setDrawMode(mode);
+      map.on('gm:loaded', () => {
+        geomanLoadedRef.current = true;
+        console.log('[AOI] Geoman fully loaded with all tools');
 
-    switch (mode) {
-      case 'rectangle':
-        setAoiMode('drawing');
-        gm.enableDraw('rectangle');
-        break;
-      case 'polygon':
-        setAoiMode('drawing');
-        gm.enableDraw('polygon');
-        break;
-      case 'edit':
-        setAoiMode('editing');
-        gm.enableGlobalEditMode();
-        break;
-      default:
-        setAoiMode('idle');
-    }
-  }, [drawMode]);
-
-  const handleClear = useCallback(() => {
-    const gm = geomanRef.current;
-    if (gm) {
-      try {
-        gm.disableDraw();
-        gm.disableGlobalEditMode();
-        // Remove all Geoman features
-        const map = mapRef.current;
-        if (map && map.gm) {
-          try {
-            const features = map.gm.features?.getFeatures?.() || [];
-            features.forEach((f: any) => map.gm.features.removeFeature(f));
-          } catch (_) {
-            // Fallback: try alternative API
-            try { map.gm.removeAll?.(); } catch (_2) {}
-          }
+        // Initially hide — user toggles via AOI icon
+        if (!toolbarVisible) {
+          hideGeomanToolbar();
         }
-      } catch (_) { /* ignore */ }
+      });
+
+      // Capture AOI creation
+      map.on('gm:create', (e: any) => {
+        const geometry = e.feature?.geometry || e.shape?.geometry;
+        if (geometry) {
+          setAoiGeometry(geometry);
+          setAoiMode('drawn');
+          console.log('[AOI] Created:', JSON.stringify(geometry));
+        }
+      });
+
+      // Capture AOI edits
+      map.on('gm:edit', (e: any) => {
+        const geometry = e.feature?.geometry || e.shape?.geometry;
+        if (geometry) {
+          setAoiGeometry(geometry);
+          console.log('[AOI] Edited:', JSON.stringify(geometry));
+        }
+      });
+
+      // Capture AOI removal
+      map.on('gm:remove', () => {
+        clearAoi();
+        console.log('[AOI] Removed');
+      });
+
+      console.log('[AOI] Geoman initialized');
+    } catch (err) {
+      console.error('[AOI] Failed to initialize Geoman:', err);
     }
-    clearAoi();
-    setDrawMode('none');
   }, []);
 
+  // Show/hide Geoman's native toolbar via DOM
+  const getGeomanToolbarEl = useCallback((): HTMLElement | null => {
+    const container = mapRef.current?.getContainer?.();
+    if (!container) return null;
+    // Geoman creates a .geoman-controls inside maplibregl-ctrl-top-left
+    return container.querySelector('.geoman-controls') as HTMLElement;
+  }, []);
+
+  const hideGeomanToolbar = useCallback(() => {
+    const el = getGeomanToolbarEl();
+    if (el) el.style.display = 'none';
+  }, [getGeomanToolbarEl]);
+
+  const showGeomanToolbar = useCallback(() => {
+    const el = getGeomanToolbarEl();
+    if (el) {
+      el.style.display = 'block';
+      // Move Geoman toolbar to the right of the sidebar (sidebar is ~310px)
+      el.style.position = 'fixed';
+      el.style.left = '320px';
+      el.style.top = '12px';
+      el.style.zIndex = '5';
+    }
+  }, [getGeomanToolbarEl]);
+
+  const toggleToolbar = useCallback(() => {
+    const next = !toolbarVisible;
+    setToolbarVisible(next);
+    if (next) {
+      showGeomanToolbar();
+    } else {
+      hideGeomanToolbar();
+      // Deactivate any active draw/edit modes
+      try {
+        const gm = geomanRef.current;
+        if (gm) {
+          gm.disableDraw();
+          gm.disableGlobalEditMode();
+          gm.disableGlobalDragMode();
+        }
+      } catch (_) {}
+      setAoiMode('idle');
+    }
+  }, [toolbarVisible, showGeomanToolbar, hideGeomanToolbar]);
+
   return (
-    <ToolbarContainer>
-      <ToolButton
-        $active={drawMode === 'rectangle'}
-        onClick={() => activateMode('rectangle')}
-        title="Draw Rectangle AOI"
+    <AoiToggleContainer>
+      <StatusDot $hasAoi={!!aoiState.geometry} />
+      <ToggleButton
+        $active={toolbarVisible}
+        onClick={toggleToolbar}
+        title={toolbarVisible ? 'Hide AOI Drawing Tools' : 'Show AOI Drawing Tools'}
       >
-        ▭
-      </ToolButton>
-      <ToolButton
-        $active={drawMode === 'polygon'}
-        onClick={() => activateMode('polygon')}
-        title="Draw Polygon AOI"
-      >
-        ⬠
-      </ToolButton>
-      <Divider />
-      <ToolButton
-        $active={drawMode === 'edit'}
-        onClick={() => activateMode('edit')}
-        title="Edit AOI"
-      >
-        ✎
-      </ToolButton>
-      <ToolButton
-        onClick={handleClear}
-        title="Clear AOI"
-      >
-        ✕
-      </ToolButton>
-      <Divider />
-      <StatusBadge $hasAoi={!!aoiState.geometry}>
-        {aoiState.geometry ? 'AOI ✓' : 'AOI'}
-      </StatusBadge>
-    </ToolbarContainer>
+        <AoiIcon />
+      </ToggleButton>
+    </AoiToggleContainer>
   );
 };
 
