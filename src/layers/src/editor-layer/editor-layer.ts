@@ -12,8 +12,7 @@ import {
   DrawPolygonByDraggingMode,
   DrawPointMode,
   DrawLineStringMode,
-  RotateMode,
-  ScaleMode
+  TransformMode
 } from '@nebula.gl/edit-modes';
 import {PathStyleExtension} from '@deck.gl/extensions';
 
@@ -78,9 +77,7 @@ export function getEditorLayer({
     // @ts-ignore
     else if (editorMode === EDITOR_MODES.DRAW_LINE) mode = DrawLineStringMode;
     // @ts-ignore
-    else if (editorMode === EDITOR_MODES.ROTATE) mode = selectedFeatureIndexes.length > 0 ? RotateMode : DEFAULT_COMPOSITE_MODE;
-    // @ts-ignore
-    else if (editorMode === EDITOR_MODES.SCALE) mode = selectedFeatureIndexes.length > 0 ? ScaleMode : DEFAULT_COMPOSITE_MODE;
+    else if (editorMode === EDITOR_MODES.TRANSFORM) mode = selectedFeatureIndexes.length > 0 ? TransformMode : DEFAULT_COMPOSITE_MODE;
   }
 
   // @ts-ignore

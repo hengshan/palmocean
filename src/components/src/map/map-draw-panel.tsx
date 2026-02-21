@@ -45,22 +45,18 @@ const LineIcon: React.FC<Partial<BaseProps>> = ({height = '16px'}) => (
 );
 LineIcon.displayName = 'LineIcon';
 
-const ScaleIcon: React.FC<Partial<BaseProps>> = ({height = '16px'}) => (
+const TransformIcon: React.FC<Partial<BaseProps>> = ({height = '16px'}) => (
   <svg width={height} height={height} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
     <rect x="3" y="3" width="10" height="10" strokeDasharray="2 2" />
-    <path d="M1 1l3 3M15 15l-3-3" />
-    <path d="M15 1l-3 3M1 15l3-3" />
+    <circle cx="3" cy="3" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="13" cy="3" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="3" cy="13" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="13" cy="13" r="1.2" fill="currentColor" stroke="none" />
+    <line x1="8" y1="3" x2="8" y2="0.5" />
+    <circle cx="8" cy="0.5" r="1" fill="currentColor" stroke="none" />
   </svg>
 );
-ScaleIcon.displayName = 'ScaleIcon';
-
-const RotateIcon: React.FC<Partial<BaseProps>> = ({height = '16px'}) => (
-  <svg width={height} height={height} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-    <path d="M13 8A5 5 0 1 1 8 3" />
-    <path d="M8 1l2 2-2 2" />
-  </svg>
-);
-RotateIcon.displayName = 'RotateIcon';
+TransformIcon.displayName = 'TransformIcon';
 
 MapDrawPanelFactory.deps = [MapControlTooltipFactory, MapControlToolbarFactory];
 
@@ -88,8 +84,7 @@ function MapDrawPanelFactory(
     point: PointIcon,
     line: LineIcon,
     freehand: FreehandIcon,
-    rotate: RotateIcon,
-    scale: ScaleIcon
+    transform: TransformIcon
   };
 
   const MapDrawPanel: React.FC<MapDrawPanelProps> = React.memo(
@@ -162,18 +157,11 @@ function MapDrawPanelFactory(
                 active={editor.mode === EDITOR_MODES.DRAW_FREEHAND}
               />
               <ToolbarItem
-                className="rotate-feature"
-                onClick={() => onSetEditorMode(EDITOR_MODES.ROTATE)}
-                label="toolbar.rotate"
-                icon={actionIcons.rotate}
-                active={editor.mode === EDITOR_MODES.ROTATE}
-              />
-              <ToolbarItem
-                className="scale-feature"
-                onClick={() => onSetEditorMode(EDITOR_MODES.SCALE)}
-                label="toolbar.scale"
-                icon={actionIcons.scale}
-                active={editor.mode === EDITOR_MODES.SCALE}
+                className="transform-feature"
+                onClick={() => onSetEditorMode(EDITOR_MODES.TRANSFORM)}
+                label="toolbar.transform"
+                icon={actionIcons.transform}
+                active={editor.mode === EDITOR_MODES.TRANSFORM}
               />
             </MapControlToolbar>
           ) : null}

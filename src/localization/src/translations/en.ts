@@ -283,8 +283,7 @@ export default {
     freehand: 'Freehand',
     point: 'Point',
     line: 'Line',
-    rotate: 'Rotate',
-    scale: 'Scale',
+    transform: 'Transform',
     hide: 'Hide',
     show: 'Show',
     ...LOCALES

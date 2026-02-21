@@ -79,12 +79,7 @@ export function onClick(
         };
       }
 
-      if (objectType?.endsWith('Polygon')) {
-        setSelectedFeature(info.object, clickContext);
-      } else {
-        // don't select points
-        setSelectedFeature(editor.selectedFeature, clickContext);
-      }
+      setSelectedFeature(info.object, clickContext);
     }
     // hide tooltips from regular data layers
     onLayerClick(null, event);
@@ -227,10 +222,7 @@ export function getCursor({
     return 'crosshair';
   }
 
-  if (
-    editorMenuActive &&
-    (editor.mode === EDITOR_MODES.ROTATE || editor.mode === EDITOR_MODES.SCALE)
-  ) {
+  if (editorMenuActive && editor.mode === EDITOR_MODES.TRANSFORM) {
     return 'move';
   }
 

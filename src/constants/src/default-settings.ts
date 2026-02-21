@@ -1193,7 +1193,7 @@ export const GEOCODER_ICON_SIZE = 80;
 
 // Editor
 export const EDITOR_LAYER_ID = 'kepler_editor_layer';
-export const EDITOR_LAYER_PICKING_RADIUS = 6;
+export const EDITOR_LAYER_PICKING_RADIUS = 12;
 export const EDITOR_MODES = {
   DRAW_POLYGON: 'DRAW_POLYGON',
   DRAW_RECTANGLE: 'DRAW_RECTANGLE',
@@ -1202,8 +1202,7 @@ export const EDITOR_MODES = {
   DRAW_POINT: 'DRAW_POINT',
   DRAW_LINE: 'DRAW_LINE',
   EDIT: 'EDIT_VERTEX',
-  ROTATE: 'ROTATE',
-  SCALE: 'SCALE'
+  TRANSFORM: 'TRANSFORM'
 };
 
 export const PLOT_TYPES = keyMirror({
