@@ -17,8 +17,6 @@ export const EDIT_TYPES = {
   MOVE_POSITION: 'movePosition',
   TRANSLATING: 'translating',
   ADD_FEATURE: 'addFeature',
-  ROTATING: 'rotating',
   ROTATED: 'rotated',
-  SCALING: 'scaling',
   SCALED: 'scaled'
 };
