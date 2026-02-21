@@ -159,6 +159,86 @@ const EmptyState = styled.p`
   font-style: italic;
 `;
 
+// ─── Step Guidance ───────────────────────────────────────────
+
+const StepGuideContainer = styled.div`
+  display: flex;
+  gap: 2px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, rgba(108,191,183,0.08) 0%, rgba(75,139,245,0.08) 100%);
+  border-radius: 6px;
+  border: 1px solid rgba(108,191,183,0.15);
+`;
+
+const StepItem = styled.div<{$active?: boolean; $done?: boolean}>`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+`;
+
+const StepNumber = styled.div<{$active?: boolean; $done?: boolean}>`
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  background: ${p => p.$done ? '#4ecdc4' : p.$active ? '#4B8BF5' : 'rgba(255,255,255,0.08)'};
+  color: ${p => (p.$done || p.$active) ? '#fff' : '#6A7485'};
+  transition: all 0.2s;
+`;
+
+const StepLabel = styled.div<{$active?: boolean; $done?: boolean}>`
+  font-size: 9px;
+  color: ${p => p.$done ? '#4ecdc4' : p.$active ? '#D3D8E0' : '#6A7485'};
+  text-align: center;
+  line-height: 1.2;
+`;
+
+const StepConnector = styled.div<{$done?: boolean}>`
+  width: 12px;
+  height: 1px;
+  background: ${p => p.$done ? '#4ecdc4' : 'rgba(255,255,255,0.1)'};
+  align-self: center;
+  margin-top: -8px;
+`;
+
+interface StepGuideProps {
+  hasTask: boolean;
+  hasAoi: boolean;
+  hasTarget: boolean;
+  isComplete: boolean;
+}
+
+const StepGuide: React.FC<StepGuideProps> = ({hasTask, hasAoi, hasTarget, isComplete}) => {
+  const steps = [
+    {num: 1, label: 'Select\nTask', done: hasTask, active: !hasTask},
+    {num: 2, label: 'Draw\nAOI', done: hasAoi, active: hasTask && !hasAoi},
+    {num: 3, label: 'Choose\nTarget', done: hasTarget, active: hasTask && hasAoi && !hasTarget},
+    {num: 4, label: 'Run\nAnalysis', done: isComplete, active: hasTask && hasAoi && hasTarget && !isComplete},
+  ];
+
+  return (
+    <StepGuideContainer>
+      {steps.map((s, i) => (
+        <React.Fragment key={s.num}>
+          {i > 0 && <StepConnector $done={s.done || steps[i-1].done} />}
+          <StepItem $active={s.active} $done={s.done}>
+            <StepNumber $active={s.active} $done={s.done}>
+              {s.done ? '✓' : s.num}
+            </StepNumber>
+            <StepLabel $active={s.active} $done={s.done}>{s.label}</StepLabel>
+          </StepItem>
+        </React.Fragment>
+      ))}
+    </StepGuideContainer>
+  );
+};
+
 const ErrorMessage = styled.div`
   margin-top: 8px;
   padding: 8px 12px;
@@ -321,8 +401,15 @@ const GeoAiPanelContent = () => {
   const isComplete = activeJob?.status === 'complete';
   const isFailed = activeJob?.status === 'failed';
 
+  const hasTask = !!taskCategory;
+  const hasAoi = !!aoiState.geometry;
+  const hasTarget = !!(selectedTarget || customTarget);
+
   return (
     <StyledGeoAIPanel>
+      {/* Step Guidance */}
+      <StepGuide hasTask={hasTask} hasAoi={hasAoi} hasTarget={hasTarget} isComplete={!!isComplete} />
+
       {/* 1. Task Selection */}
       <StyledSection>
         <StyledSectionTitle>Analysis Task</StyledSectionTitle>
@@ -403,7 +490,7 @@ const GeoAiPanelContent = () => {
           </div>
         ) : (
           <EmptyState>
-            Click the ⊞ button on the map to draw your analysis area
+            Use the Draw on Map tools (top-right) to define your analysis area — rectangle or polygon.
           </EmptyState>
         )}
       </StyledSection>

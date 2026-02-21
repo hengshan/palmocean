@@ -436,7 +436,15 @@ const GEEPanel = () => {
       )}
 
       {!searching && results.length === 0 && !searchError && (
-        <EmptyMsg>Navigate to an area of interest, then search. GEE will find imagery for the current map view.</EmptyMsg>
+        <Section style={{textAlign: 'center', padding: '24px 16px'}}>
+          <div style={{fontSize: 28, marginBottom: 8}}>🌍</div>
+          <div style={{color: '#D3D8E0', fontSize: 12, fontWeight: 500, marginBottom: 6}}>
+            Ready to search Earth Engine
+          </div>
+          <EmptyMsg style={{textAlign: 'center', padding: 0}}>
+            Navigate the map to your area of interest, then click "Search Current View" to find satellite imagery.
+          </EmptyMsg>
+        </Section>
       )}
     </>
   );
@@ -781,7 +789,16 @@ const DataPanelContent = () => {
           )}
 
           {!searching && results.length === 0 && !searchError && (
-            <EmptyMsg>Search for satellite imagery above. Results will appear here.</EmptyMsg>
+            <Section style={{textAlign: 'center', padding: '24px 16px'}}>
+              <div style={{fontSize: 28, marginBottom: 8}}>🛰️</div>
+              <div style={{color: '#D3D8E0', fontSize: 12, fontWeight: 500, marginBottom: 6}}>
+                No satellite imagery loaded yet
+              </div>
+              <EmptyMsg style={{textAlign: 'center', padding: 0}}>
+                Choose a provider and collection above, then click "Search Satellite Data" to find imagery for your area.
+                Use 📍 Current View to auto-fill the bounding box from the map.
+              </EmptyMsg>
+            </Section>
           )}
         </>
       )}
