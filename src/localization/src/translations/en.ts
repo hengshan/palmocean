@@ -279,6 +279,9 @@ export default {
     select: 'Select',
     polygon: 'Polygon',
     rectangle: 'Rectangle',
+    circle: 'Circle',
+    freehand: 'Freehand',
+    rotate: 'Rotate',
     hide: 'Hide',
     show: 'Show',
     ...LOCALES

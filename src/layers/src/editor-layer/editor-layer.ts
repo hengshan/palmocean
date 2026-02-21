@@ -73,8 +73,8 @@ export function getEditorLayer({
     else if (editorMode === EDITOR_MODES.DRAW_FREEHAND) mode = DrawPolygonByDraggingMode;
     // @ts-ignore
     else if (editorMode === EDITOR_MODES.ROTATE) mode = RotateMode;
-    // @ts-ignore
-    else if (editorMode === EDITOR_MODES.SCALE) mode = ScaleMode;
+    // SCALE removed — causes "coordinates must contain numbers" bug
+    // else if (editorMode === EDITOR_MODES.SCALE) mode = ScaleMode;
   }
 
   // @ts-ignore

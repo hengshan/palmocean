@@ -28,6 +28,7 @@ import Announcement, {FormLink} from './components/announcement';
 import {replaceLoadDataModal} from './factories/load-data-modal';
 import {replaceMapControl} from './factories/map-control';
 import {replacePanelHeader} from './factories/panel-header';
+import {setAoiGeometry, setAoiMode, clearAoi} from './palmview/raster-state';
 import {CLOUD_PROVIDERS_CONFIGURATION, DEFAULT_FEATURE_FLAGS} from './constants/default-settings';
 import {messages} from './constants/localization';
 
@@ -170,6 +171,52 @@ const App = props => {
   const isAiAssistantPanelOpen = useSelector(
     state => state?.demo?.keplerGl?.map?.uiState.mapControls.aiAssistant?.active
   );
+
+  // AOI bridge: sync Kepler editor features → palmview AOI state + window.__PALMVIEW_AOI
+  const editorFeatures = useSelector(
+    (state: any) => state?.demo?.keplerGl?.map?.visState?.editor?.features
+  );
+
+  useEffect(() => {
+    // Expose window.__PALMVIEW_AOI for external access
+    (window as any).__PALMVIEW_AOI = {
+      clear: () => {
+        try { clearAoi(); } catch (_e) { /* ignore if not loaded */ }
+      },
+      getGeometries: () =>
+        (editorFeatures || []).map((f: any) => f.geometry).filter(Boolean),
+      getFeatureCollection: (): GeoJSON.FeatureCollection => ({
+        type: 'FeatureCollection',
+        features: (editorFeatures || []).map((f: any, i: number) => ({
+          type: 'Feature' as const,
+          properties: {id: i, source: 'aoi-draw'},
+          geometry: f.geometry,
+        })),
+      }),
+    };
+
+    // Sync to palmview raster-state
+    if (editorFeatures && editorFeatures.length > 0) {
+      const polygons: GeoJSON.Position[][][] = [];
+      for (const f of editorFeatures) {
+        const g = f.geometry;
+        if (g?.type === 'Polygon') polygons.push(g.coordinates);
+        else if (g?.type === 'MultiPolygon') polygons.push(...g.coordinates);
+      }
+      if (polygons.length > 0) {
+        const geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon =
+          polygons.length === 1
+            ? {type: 'Polygon', coordinates: polygons[0]}
+            : {type: 'MultiPolygon', coordinates: polygons};
+        setAoiGeometry(geometry);
+        setAoiMode('drawn');
+      }
+    }
+
+    return () => {
+      delete (window as any).__PALMVIEW_AOI;
+    };
+  }, [editorFeatures]);
 
   const prevQueryRef = useRef<number>(null);
 

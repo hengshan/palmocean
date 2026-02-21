@@ -227,7 +227,7 @@ export function getCursor({
 
   if (
     editorMenuActive &&
-    (editor.mode === EDITOR_MODES.ROTATE || editor.mode === EDITOR_MODES.SCALE)
+    (editor.mode === EDITOR_MODES.ROTATE)
   ) {
     return 'move';
   }

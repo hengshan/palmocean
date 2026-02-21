@@ -1200,8 +1200,8 @@ export const EDITOR_MODES = {
   DRAW_CIRCLE: 'DRAW_CIRCLE',
   DRAW_FREEHAND: 'DRAW_FREEHAND',
   EDIT: 'EDIT_VERTEX',
-  ROTATE: 'ROTATE',
-  SCALE: 'SCALE'
+  ROTATE: 'ROTATE'
+  // SCALE removed — causes "coordinates must contain numbers" bug
 };
 
 export const PLOT_TYPES = keyMirror({
