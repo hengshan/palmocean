@@ -79,17 +79,25 @@ const GEOMAN_DARK_CSS = `
   --gm-active: #1FBF6E;
   --gm-border: rgba(255, 255, 255, 0.1);
 }
+.geoman-controls {
+  z-index: 999 !important;
+  pointer-events: all !important;
+}
 .geoman-controls .maplibregl-ctrl-group {
   background: var(--gm-bg) !important;
   border: 1px solid var(--gm-border) !important;
   box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
   border-radius: 4px !important;
+  pointer-events: all !important;
 }
 .geoman-controls button {
   background: transparent !important;
   border: none !important;
   width: 29px !important;
   height: 29px !important;
+  pointer-events: all !important;
+  cursor: pointer !important;
+  position: relative !important;
 }
 .geoman-controls button:hover {
   background: var(--gm-hover) !important;
@@ -326,11 +334,18 @@ const AoiToolbar: React.FC<AoiToolbarProps> = ({map: mapProp}) => {
     const el = getGeomanToolbarEl();
     if (el) {
       el.style.display = 'block';
-      // Position next to sidebar
+      // Position next to sidebar, above all Kepler overlays
       el.style.position = 'fixed';
       el.style.left = '320px';
       el.style.top = '12px';
-      el.style.zIndex = '5';
+      el.style.zIndex = '999';
+      el.style.pointerEvents = 'all';
+      // Ensure all child buttons are clickable
+      const buttons = el.querySelectorAll('button');
+      buttons.forEach((btn: HTMLElement) => {
+        btn.style.pointerEvents = 'all';
+        btn.style.cursor = 'pointer';
+      });
     }
   }, [getGeomanToolbarEl]);
 
