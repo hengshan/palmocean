@@ -17,7 +17,9 @@ export function isDrawingActive(editorMenuActive: boolean, mode: string): boolea
     (mode === EDITOR_MODES.DRAW_POLYGON ||
       mode === EDITOR_MODES.DRAW_RECTANGLE ||
       mode === EDITOR_MODES.DRAW_CIRCLE ||
-      mode === EDITOR_MODES.DRAW_FREEHAND)
+      mode === EDITOR_MODES.DRAW_FREEHAND ||
+      mode === EDITOR_MODES.DRAW_POINT ||
+      mode === EDITOR_MODES.DRAW_LINE)
   );
 }
 
@@ -227,7 +229,7 @@ export function getCursor({
 
   if (
     editorMenuActive &&
-    (editor.mode === EDITOR_MODES.ROTATE)
+    (editor.mode === EDITOR_MODES.ROTATE || editor.mode === EDITOR_MODES.SCALE)
   ) {
     return 'move';
   }

@@ -10,6 +10,8 @@ import {
   DrawRectangleMode,
   DrawCircleFromCenterMode,
   DrawPolygonByDraggingMode,
+  DrawPointMode,
+  DrawLineStringMode,
   RotateMode,
   ScaleMode
 } from '@nebula.gl/edit-modes';
@@ -72,9 +74,13 @@ export function getEditorLayer({
     // @ts-ignore
     else if (editorMode === EDITOR_MODES.DRAW_FREEHAND) mode = DrawPolygonByDraggingMode;
     // @ts-ignore
-    else if (editorMode === EDITOR_MODES.ROTATE) mode = RotateMode;
-    // SCALE removed — causes "coordinates must contain numbers" bug
-    // else if (editorMode === EDITOR_MODES.SCALE) mode = ScaleMode;
+    else if (editorMode === EDITOR_MODES.DRAW_POINT) mode = DrawPointMode;
+    // @ts-ignore
+    else if (editorMode === EDITOR_MODES.DRAW_LINE) mode = DrawLineStringMode;
+    // @ts-ignore
+    else if (editorMode === EDITOR_MODES.ROTATE) mode = selectedFeatureIndexes.length > 0 ? RotateMode : DEFAULT_COMPOSITE_MODE;
+    // @ts-ignore
+    else if (editorMode === EDITOR_MODES.SCALE) mode = selectedFeatureIndexes.length > 0 ? ScaleMode : DEFAULT_COMPOSITE_MODE;
   }
 
   // @ts-ignore

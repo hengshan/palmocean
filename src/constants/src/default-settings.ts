@@ -1199,9 +1199,11 @@ export const EDITOR_MODES = {
   DRAW_RECTANGLE: 'DRAW_RECTANGLE',
   DRAW_CIRCLE: 'DRAW_CIRCLE',
   DRAW_FREEHAND: 'DRAW_FREEHAND',
+  DRAW_POINT: 'DRAW_POINT',
+  DRAW_LINE: 'DRAW_LINE',
   EDIT: 'EDIT_VERTEX',
-  ROTATE: 'ROTATE'
-  // SCALE removed — causes "coordinates must contain numbers" bug
+  ROTATE: 'ROTATE',
+  SCALE: 'SCALE'
 };
 
 export const PLOT_TYPES = keyMirror({

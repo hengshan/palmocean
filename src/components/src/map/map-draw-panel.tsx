@@ -29,6 +29,31 @@ const FreehandIcon: React.FC<Partial<BaseProps>> = ({height = '16px'}) => (
 );
 FreehandIcon.displayName = 'FreehandIcon';
 
+const PointIcon: React.FC<Partial<BaseProps>> = ({height = '16px'}) => (
+  <svg width={height} height={height} viewBox="0 0 16 16" fill="currentColor" stroke="none">
+    <circle cx="8" cy="8" r="4" />
+  </svg>
+);
+PointIcon.displayName = 'PointIcon';
+
+const LineIcon: React.FC<Partial<BaseProps>> = ({height = '16px'}) => (
+  <svg width={height} height={height} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <line x1="2" y1="14" x2="14" y2="2" />
+    <circle cx="2" cy="14" r="1.5" fill="currentColor" />
+    <circle cx="14" cy="2" r="1.5" fill="currentColor" />
+  </svg>
+);
+LineIcon.displayName = 'LineIcon';
+
+const ScaleIcon: React.FC<Partial<BaseProps>> = ({height = '16px'}) => (
+  <svg width={height} height={height} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <rect x="3" y="3" width="10" height="10" strokeDasharray="2 2" />
+    <path d="M1 1l3 3M15 15l-3-3" />
+    <path d="M15 1l-3 3M1 15l3-3" />
+  </svg>
+);
+ScaleIcon.displayName = 'ScaleIcon';
+
 const RotateIcon: React.FC<Partial<BaseProps>> = ({height = '16px'}) => (
   <svg width={height} height={height} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
     <path d="M13 8A5 5 0 1 1 8 3" />
@@ -60,8 +85,11 @@ function MapDrawPanelFactory(
     innerPolygon: Polygon,
     rectangle: Rectangle,
     circle: CircleIcon,
+    point: PointIcon,
+    line: LineIcon,
     freehand: FreehandIcon,
-    rotate: RotateIcon
+    rotate: RotateIcon,
+    scale: ScaleIcon
   };
 
   const MapDrawPanel: React.FC<MapDrawPanelProps> = React.memo(
@@ -113,6 +141,20 @@ function MapDrawPanelFactory(
                 active={editor.mode === EDITOR_MODES.DRAW_CIRCLE}
               />
               <ToolbarItem
+                className="draw-point"
+                onClick={() => onSetEditorMode(EDITOR_MODES.DRAW_POINT)}
+                label="toolbar.point"
+                icon={actionIcons.point}
+                active={editor.mode === EDITOR_MODES.DRAW_POINT}
+              />
+              <ToolbarItem
+                className="draw-line"
+                onClick={() => onSetEditorMode(EDITOR_MODES.DRAW_LINE)}
+                label="toolbar.line"
+                icon={actionIcons.line}
+                active={editor.mode === EDITOR_MODES.DRAW_LINE}
+              />
+              <ToolbarItem
                 className="draw-freehand"
                 onClick={() => onSetEditorMode(EDITOR_MODES.DRAW_FREEHAND)}
                 label="toolbar.freehand"
@@ -125,6 +167,13 @@ function MapDrawPanelFactory(
                 label="toolbar.rotate"
                 icon={actionIcons.rotate}
                 active={editor.mode === EDITOR_MODES.ROTATE}
+              />
+              <ToolbarItem
+                className="scale-feature"
+                onClick={() => onSetEditorMode(EDITOR_MODES.SCALE)}
+                label="toolbar.scale"
+                icon={actionIcons.scale}
+                active={editor.mode === EDITOR_MODES.SCALE}
               />
             </MapControlToolbar>
           ) : null}

@@ -281,7 +281,10 @@ export default {
     rectangle: 'Rectangle',
     circle: 'Circle',
     freehand: 'Freehand',
+    point: 'Point',
+    line: 'Line',
     rotate: 'Rotate',
+    scale: 'Scale',
     hide: 'Hide',
     show: 'Show',
     ...LOCALES
