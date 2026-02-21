@@ -48,12 +48,15 @@ const StyledButton = styled.button<{active?: boolean}>`
   background: ${(props: any) =>
     props.active ? props.theme?.activeColor || '#6CBFB7' : props.theme?.panelBackground || 'rgba(255,255,255,0.06)'};
   color: ${(props: any) => props.active ? '#fff' : props.theme?.textColor || '#A0A7B4'};
-  border: 1px solid ${(props: any) => props.active ? 'transparent' : props.theme?.borderColor || 'rgba(255,255,255,0.1)'};
-  border-radius: 4px;
-  padding: 6px 10px;
+  border: 2px solid ${(props: any) => props.active ? props.theme?.activeColor || '#6CBFB7' : props.theme?.borderColor || 'rgba(255,255,255,0.1)'};
+  border-radius: 6px;
+  padding: 8px 12px;
   font-size: 11px;
+  font-weight: ${(props: any) => props.active ? 600 : 400};
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
+  box-shadow: ${(props: any) => props.active ? '0 0 8px rgba(108, 191, 183, 0.4)' : 'none'};
+  transform: ${(props: any) => props.active ? 'scale(1.02)' : 'scale(1)'};
   &:hover { background: ${(props: any) => props.theme?.activeColor || '#6CBFB7'}; color: #fff; }
 `;
 
@@ -419,11 +422,14 @@ const GeoAiPanelContent = () => {
               key={cat.id}
               active={taskCategory === cat.id}
               onClick={() => {
-                setTaskCategory(taskCategory === cat.id ? null : cat.id);
+                const newTask = taskCategory === cat.id ? null : cat.id;
+                setTaskCategory(newTask);
                 setSelectedTarget(null);
                 setCustomTarget('');
                 setActiveJob(null);
                 setSubmitError(null);
+                // Auto-expand model config when task selected
+                if (newTask) setModelConfigOpen(true);
               }}
             >
               {cat.icon} {cat.label}
