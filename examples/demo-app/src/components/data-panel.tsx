@@ -612,7 +612,7 @@ const DataPanelContent = () => {
       {/* Source Toggle */}
       <SourceToggle>
         <SourceBtn active={source === 'stac'} onClick={() => setSource('stac')}>
-          🛰 STAC Satellite
+          STAC Satellite
         </SourceBtn>
         <SourceBtn active={source === 'gee'} onClick={() => setSource('gee')}>
           🌍 Google Earth Engine
@@ -625,7 +625,7 @@ const DataPanelContent = () => {
         <>
           {/* Provider + Collection */}
           <Section>
-            <SectionTitle>🛰 Data Source</SectionTitle>
+            <SectionTitle>Data Source</SectionTitle>
 
             <Label>Provider</Label>
             <Select value={selectedProvider} onChange={e => setSelectedProvider(e.target.value)}>
@@ -792,10 +792,18 @@ const DataPanelContent = () => {
 // ─── Data Icon ───────────────────────────────────────
 
 const DataIcon = (props: any) => (
-  <svg viewBox="0 0 24 24" width={props.height || '18px'} height={props.height || '18px'} fill="none" stroke="currentColor">
-    <ellipse cx="12" cy="6" rx="8" ry="3" strokeWidth="1.5" />
-    <path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6" strokeWidth="1.5" />
-    <path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" strokeWidth="1.5" />
+  <svg viewBox="0 0 24 24" width={props.height || '18px'} height={props.height || '18px'} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+    {/* Satellite body */}
+    <rect x="9" y="9" width="6" height="6" rx="1" strokeWidth="1.5" />
+    {/* Solar panels */}
+    <path d="M3 8h4v8H3zM17 8h4v8h-4z" strokeWidth="1.5" />
+    <path d="M7 12H9M15 12h2" strokeWidth="1.5" />
+    {/* Antenna */}
+    <path d="M12 9V5" strokeWidth="1.5" />
+    <circle cx="12" cy="4" r="1" strokeWidth="1" />
+    {/* Signal waves */}
+    <path d="M10 19c1-1 3-1 4 0" strokeWidth="1" opacity="0.5" />
+    <path d="M8 21c2-2 6-2 8 0" strokeWidth="1" opacity="0.35" />
   </svg>
 );
 

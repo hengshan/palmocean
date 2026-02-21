@@ -313,7 +313,7 @@ const GeoAiPanelContent = () => {
     <StyledGeoAIPanel>
       {/* 1. Task Selection */}
       <StyledSection>
-        <StyledSectionTitle>🧠 Analysis Task</StyledSectionTitle>
+        <StyledSectionTitle>Analysis Task</StyledSectionTitle>
         <ButtonRow>
           {TASK_CATEGORIES.map(cat => (
             <StyledButton
@@ -430,10 +430,15 @@ const GeoAiPanelContent = () => {
 // ─── Brain Icon ──────────────────────────────────────────────
 
 const BrainIcon = (props: any) => (
-  <svg viewBox="0 0 24 24" width={props.height || '18px'} height={props.height || '18px'} fill="none" stroke="currentColor">
-    <circle cx="12" cy="10" r="7" strokeWidth="1.5" />
-    <path d="M12 3v14M8 7q4 3 8 0M8 13q4-3 8 0" strokeWidth="1" />
-    <path d="M12 17v4" strokeWidth="1.5" />
+  <svg viewBox="0 0 24 24" width={props.height || '18px'} height={props.height || '18px'} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+    {/* Left hemisphere */}
+    <path d="M12 2C9.5 2 7 3.5 7 6c-2 0-3.5 1.5-3.5 3.5 0 1.2.6 2.2 1.5 2.8C4.4 13 4 14 4 15c0 2 1.5 3.5 3.5 3.5.5 1.5 2 2.5 4.5 2.5" strokeWidth="1.5" />
+    {/* Right hemisphere */}
+    <path d="M12 2c2.5 0 5 1.5 5 4 2 0 3.5 1.5 3.5 3.5 0 1.2-.6 2.2-1.5 2.8.6.7 1 1.7 1 2.7 0 2-1.5 3.5-3.5 3.5-.5 1.5-2 2.5-4.5 2.5" strokeWidth="1.5" />
+    {/* Central fissure */}
+    <path d="M12 2v19" strokeWidth="1" opacity="0.5" />
+    {/* Neural connections */}
+    <path d="M8 8h8M7 12h10M8 16h8" strokeWidth="0.75" opacity="0.4" strokeDasharray="1.5 1.5" />
   </svg>
 );
 
