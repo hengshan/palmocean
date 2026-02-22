@@ -2,7 +2,7 @@
 // V5: Inline progress, auto-add results to map, clean UX
 import React, {useState, useEffect, useCallback, useRef} from 'react';
 import styled from 'styled-components';
-import {useSelector} from 'react-redux';
+import {useSelector, useDispatch} from 'react-redux';
 import {FloatingResultsPanel} from '../palmview';
 import {
   submitInferenceJob,
@@ -12,6 +12,8 @@ import {
   createProject,
   getMapState,
   subscribe,
+  addResultsToKeplerMap,
+  getJobOutputs,
   type InferenceJobDetail,
   type InferenceJobSubmit,
   type WSInferenceMessage,
@@ -285,6 +287,7 @@ const QUICK_TARGETS: Record<string, Array<{id: string; label: string}>> = {
 // ─── Panel Content Component ─────────────────────────────────
 
 const GeoAiPanelContent = () => {
+  const dispatch = useDispatch();
   const [taskCategory, setTaskCategory] = useState<string | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [customTarget, setCustomTarget] = useState('');
@@ -341,13 +344,14 @@ const GeoAiPanelContent = () => {
   }, []);
 
   const loadHistory = useCallback(async () => {
+    if (!projectId) return;
     setHistoryLoading(true);
     try {
-      const res = await listInferenceJobs();
+      const res = await listInferenceJobs(projectId);
       setJobHistory(Array.isArray(res) ? res : (res as any)?.jobs || []);
     } catch { /* ignore */ }
     finally { setHistoryLoading(false); }
-  }, []);
+  }, [projectId]);
 
   const handleRunAnalysis = useCallback(async () => {
     if (!taskCategory || (!selectedTarget && !customTarget) || !projectId) return;
@@ -393,11 +397,9 @@ const GeoAiPanelContent = () => {
             setActiveJob(prev => prev ? {...prev, status: 'complete', progress: 1} : prev);
             setShowResults(true);
             // Fetch outputs for results panel
-            import('../palmview').then(({getJobOutputs}) => {
-              getJobOutputs(result.job_id).then(res => {
-                setJobOutputs(res.outputs || []);
-              }).catch(() => {});
-            });
+            getJobOutputs(result.job_id).then(res => {
+              setJobOutputs(res.outputs || []);
+            }).catch(() => {});
             loadHistory();
           }
           if (msg.type === 'error') {
@@ -564,10 +566,32 @@ const GeoAiPanelContent = () => {
         onClose={() => setShowResults(false)}
         onConfidenceChange={setConfidenceThreshold}
         onAddToMap={() => {
-          console.log('[GeoAI] Add results to map — TODO: dispatch addDataToMap');
+          if (activeJob) {
+            addResultsToKeplerMap(dispatch, activeJob as InferenceJobDetail, confidenceThreshold)
+              .then(() => console.log('[GeoAI] Results added to map'))
+              .catch(err => console.error('[GeoAI] Failed to add results:', err));
+          }
         }}
         onExport={(format) => {
-          console.log('[GeoAI] Export results as', format);
+          if (!activeJob || jobOutputs.length === 0) return;
+          // Find first GeoJSON output and trigger download
+          const geojsonOutput = jobOutputs.find((o: any) => o.format === 'geojson');
+          if (geojsonOutput) {
+            const url = geojsonOutput.uri.startsWith('http')
+              ? geojsonOutput.uri
+              : `${(typeof process !== 'undefined' && process.env?.PALMVIEW_API_URL) || 'http://100.81.217.18:8000'}${geojsonOutput.uri}`;
+            fetch(url)
+              .then(r => r.json())
+              .then(data => {
+                const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/geo+json'});
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `palmview-${activeJob.job_id.slice(0, 8)}.geojson`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+              })
+              .catch(err => console.error('[GeoAI] Export failed:', err));
+          }
         }}
       />
 
