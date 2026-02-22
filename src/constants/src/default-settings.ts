@@ -362,6 +362,15 @@ export const DEFAULT_MAPBOX_SATELITE_STYLES: DefaultBaseMapStyle[] = [
 
 export const DEFAULT_MAPLIBRE_STYLES: DefaultBaseMapStyle[] = [
   {
+    id: 'voyager',
+    label: 'Voyager',
+    url: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+    icon: `${BASEMAP_ICON_PREFIX}/VOYAGER.png`,
+    layerGroups: DEFAULT_LAYER_GROUPS,
+    colorMode: BASE_MAP_COLOR_MODES.LIGHT,
+    complimentaryStyleId: 'dark-matter'
+  },
+  {
     id: 'dark-matter',
     label: 'DarkMatter',
     url: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
@@ -380,20 +389,20 @@ export const DEFAULT_MAPLIBRE_STYLES: DefaultBaseMapStyle[] = [
     complimentaryStyleId: 'dark-matter'
   },
   {
-    id: 'voyager',
-    label: 'Voyager',
-    url: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
-    icon: `${BASEMAP_ICON_PREFIX}/VOYAGER.png`,
+    id: 'dark-matter-nolabels',
+    label: 'Dark (No Labels)',
+    url: 'https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json',
+    icon: `${BASEMAP_ICON_PREFIX}/DARKMATTER.png`,
     layerGroups: DEFAULT_LAYER_GROUPS,
-    colorMode: BASE_MAP_COLOR_MODES.LIGHT,
-    complimentaryStyleId: 'dark-matter'
+    colorMode: BASE_MAP_COLOR_MODES.DARK,
+    complimentaryStyleId: 'positron'
   }
 ];
 
 export const DEFAULT_MAP_STYLES = [
-  DEFAULT_NO_BASEMAP_STYLE,
-  ...DEFAULT_MAPLIBRE_STYLES,
   ...DEFAULT_MAPBOX_SATELITE_STYLES,
+  ...DEFAULT_MAPLIBRE_STYLES,
+  DEFAULT_NO_BASEMAP_STYLE,
   ...DEFAULT_MAPBOX_STYLES
 ];
 

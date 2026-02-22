@@ -1,12 +1,33 @@
 // Data Tab — Satellite Data Search, Download & Load to Map
 // STAC search (Planetary Computer, Earth Search, Copernicus) + GEE + Local Upload
-import React, {useState, useEffect, useCallback, useRef} from 'react';
+// State is persisted in raster-state.ts so it survives panel switches.
+import React, {useState, useEffect, useCallback, useRef, useSyncExternalStore} from 'react';
 import styled from 'styled-components';
 import {fromArrayBuffer} from 'geotiff';
+import {
+  getMapState,
+  subscribe,
+  updateDataTab,
+  addLoadedLayer,
+  removeLoadedLayer,
+  attachStyleListener,
+  type STACSearchItemPersist,
+  type LoadedLayerInfo,
+  type DataTabState,
+} from '../palmview/raster-state';
 
 const API_BASE =
   (typeof process !== 'undefined' && process.env?.PALMVIEW_API_URL) ||
   'http://100.81.217.18:8000';
+
+// ─── Hook: subscribe to dataTab state ────────────────
+
+function useDataTab(): DataTabState {
+  return useSyncExternalStore(
+    subscribe,
+    () => getMapState().dataTab
+  );
+}
 
 // ─── Types ───────────────────────────────────────────
 
@@ -21,16 +42,6 @@ interface STACCollection {
   id: string;
   title?: string;
   description?: string;
-}
-
-interface STACSearchItem {
-  id: string;
-  collection: string;
-  datetime: string;
-  bbox: number[];
-  properties: Record<string, any>;
-  assets: Record<string, { href: string; type?: string; title?: string }>;
-  links?: Array<{ rel: string; href: string }>;
 }
 
 // ─── Styled Components ───────────────────────────────
@@ -66,14 +77,14 @@ const SourceToggle = styled.div`
   gap: 0;
   border-radius: 4px;
   overflow: hidden;
-  margin-bottom: 10px;
   border: 1px solid ${(p: any) => p.theme?.borderColor || 'rgba(255,255,255,0.1)'};
+  flex-shrink: 0;
 `;
 
-const SourceBtn = styled.button<{active?: boolean}>`
+const SourceBtn = styled.button<{$active?: boolean}>`
   flex: 1;
-  background: ${(p: any) => p.active ? p.theme?.activeColor || '#1FBF6E' : 'transparent'};
-  color: ${(p: any) => p.active ? '#fff' : p.theme?.textColor || '#A0A7B4'};
+  background: ${(p: any) => p.$active ? p.theme?.activeColor || '#1FBF6E' : 'transparent'};
+  color: ${(p: any) => p.$active ? '#fff' : p.theme?.textColor || '#A0A7B4'};
   border: none;
   padding: 8px;
   font-size: 11px;
@@ -121,16 +132,16 @@ const Label = styled.label`
   display: block;
 `;
 
-const Btn = styled.button<{primary?: boolean; small?: boolean; danger?: boolean}>`
+const Btn = styled.button<{$primary?: boolean; $small?: boolean; $danger?: boolean}>`
   background: ${(p: any) =>
-    p.danger ? '#F9042C' :
-    p.primary ? p.theme?.activeColor || '#1FBF6E' :
+    p.$danger ? '#F9042C' :
+    p.$primary ? p.theme?.activeColor || '#1FBF6E' :
     p.theme?.panelBackground || 'rgba(255,255,255,0.06)'};
-  color: ${(p: any) => (p.primary || p.danger) ? '#fff' : p.theme?.textColor || '#A0A7B4'};
-  border: 1px solid ${(p: any) => (p.primary || p.danger) ? 'transparent' : p.theme?.borderColor || 'rgba(255,255,255,0.1)'};
+  color: ${(p: any) => (p.$primary || p.$danger) ? '#fff' : p.theme?.textColor || '#A0A7B4'};
+  border: 1px solid ${(p: any) => (p.$primary || p.$danger) ? 'transparent' : p.theme?.borderColor || 'rgba(255,255,255,0.1)'};
   border-radius: 4px;
-  padding: ${(p: any) => p.small ? '4px 8px' : '8px 12px'};
-  font-size: ${(p: any) => p.small ? '10px' : '11px'};
+  padding: ${(p: any) => p.$small ? '4px 8px' : '8px 12px'};
+  font-size: ${(p: any) => p.$small ? '10px' : '11px'};
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
@@ -177,8 +188,8 @@ const Muted = styled.span`
   font-size: 10px;
 `;
 
-const Badge = styled.span<{color?: string}>`
-  background: ${(p: any) => p.color || 'rgba(255,255,255,0.1)'};
+const Badge = styled.span<{$color?: string}>`
+  background: ${(p: any) => p.$color || 'rgba(255,255,255,0.1)'};
   color: #fff;
   font-size: 9px;
   padding: 2px 6px;
@@ -207,12 +218,6 @@ const EmptyMsg = styled.p`
   margin: 0;
 `;
 
-const Divider = styled.div`
-  height: 1px;
-  background: ${(p: any) => p.theme?.borderColor || 'rgba(255,255,255,0.08)'};
-  margin: 4px 0;
-`;
-
 // ─── Helper ──────────────────────────────────────────
 
 function formatDate(iso: string): string {
@@ -223,15 +228,58 @@ function getCloudCover(props: Record<string, any>): number | null {
   return props['eo:cloud_cover'] ?? props['cloudcover'] ?? null;
 }
 
-function getThumbnail(item: STACSearchItem): string | null {
+function getThumbnail(item: STACSearchItemPersist): string | null {
   const thumb = item.assets?.thumbnail?.href || item.assets?.rendered_preview?.href;
   if (thumb) return thumb;
-  // Try links
   const link = item.links?.find(l => l.rel === 'preview' || l.rel === 'thumbnail');
   return link?.href || null;
 }
 
-// ─── GEE Types ───────────────────────────────────────
+/** Get the map instance and ensure style listener is attached */
+function getMap(): any {
+  const map = (window as any).__PALMVIEW_MAP;
+  if (map) attachStyleListener();
+  return map;
+}
+
+/** Find first symbol layer id for inserting raster beneath labels */
+function getFirstSymbolId(map: any): string | undefined {
+  return map.getStyle()?.layers?.find((l: any) => l.type === 'symbol')?.id;
+}
+
+/** Add a raster layer to the map, returns true on success */
+function addRasterToMap(
+  map: any,
+  layerId: string,
+  sourceId: string,
+  opts: { tileUrl?: string; imageUrl?: string; bbox?: [number, number, number, number] }
+): boolean {
+  const firstSymbolId = getFirstSymbolId(map);
+  try {
+    if (opts.tileUrl) {
+      map.addSource(sourceId, { type: 'raster', tiles: [opts.tileUrl], tileSize: 256 });
+    } else if (opts.imageUrl && opts.bbox) {
+      const [west, south, east, north] = opts.bbox;
+      map.addSource(sourceId, {
+        type: 'image',
+        url: opts.imageUrl,
+        coordinates: [[west, north], [east, north], [east, south], [west, south]],
+      });
+    } else {
+      return false;
+    }
+    map.addLayer(
+      { id: layerId, type: 'raster', source: sourceId, paint: { 'raster-opacity': 0.85 } },
+      firstSymbolId
+    );
+    return true;
+  } catch (e) {
+    console.error('[Data] addRasterToMap failed:', e);
+    return false;
+  }
+}
+
+// ─── GEE Panel ───────────────────────────────────────
 
 interface GEECollection {
   id: string;
@@ -249,26 +297,18 @@ interface GEESearchResult {
   properties?: Record<string, any>;
 }
 
-// ─── GEE Panel ───────────────────────────────────────
-
 const GEEPanel = () => {
+  const dt = useDataTab();
   const [collections, setCollections] = useState<GEECollection[]>([]);
-  const [selectedCollection, setSelectedCollection] = useState('COPERNICUS/S2_SR_HARMONIZED');
-  const [dateFrom, setDateFrom] = useState('2025-01-01');
-  const [dateTo, setDateTo] = useState('2025-12-31');
-  const [maxCloud, setMaxCloud] = useState(30);
-  const [results, setResults] = useState<GEESearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [geeStatus, setGeeStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
   const [loadingThumb, setLoadingThumb] = useState<string | null>(null);
 
-  // Check GEE status + load collections on mount
   useEffect(() => {
     fetch(`${API_BASE}/api/v1/data/gee/status`)
       .then(r => r.json())
-      .then(data => setGeeStatus(data.status === 'connected' ? 'connected' : 'disconnected'))
-      .catch(() => setGeeStatus('disconnected'));
+      .then(data => updateDataTab({ geeStatus: data.status === 'connected' ? 'connected' : 'disconnected' }))
+      .catch(() => updateDataTab({ geeStatus: 'disconnected' }));
 
     fetch(`${API_BASE}/api/v1/data/gee/collections`)
       .then(r => r.json())
@@ -277,68 +317,55 @@ const GEEPanel = () => {
   }, []);
 
   const handleSearch = useCallback(async () => {
-    const map = (window as any).__PALMVIEW_MAP;
+    const map = getMap();
     if (!map) {
-      setSearchError('Map not ready — please wait for map to load');
+      setSearchError('Map not ready');
       return;
     }
     setSearching(true);
     setSearchError(null);
-    setResults([]);
+    updateDataTab({ geeResults: [] });
     try {
       const bounds = map.getBounds();
       const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
-
       const url = new URL(`${API_BASE}/api/v1/data/gee/search`);
-      url.searchParams.set('collection', selectedCollection);
+      url.searchParams.set('collection', dt.geeCollection);
       url.searchParams.set('bbox', bbox.join(','));
-      url.searchParams.set('start_date', dateFrom);
-      url.searchParams.set('end_date', dateTo);
-      url.searchParams.set('max_cloud_cover', String(maxCloud));
+      url.searchParams.set('start_date', dt.geeDateFrom);
+      url.searchParams.set('end_date', dt.geeDateTo);
+      url.searchParams.set('max_cloud_cover', String(dt.geeMaxCloud));
       url.searchParams.set('limit', '20');
 
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error(`GEE search failed: ${res.status}`);
       const data = await res.json();
-      setResults(Array.isArray(data) ? data : data.images || data.results || []);
+      updateDataTab({ geeResults: Array.isArray(data) ? data : data.images || data.results || [] });
     } catch (err: any) {
       setSearchError(err.message);
     } finally {
       setSearching(false);
     }
-  }, [selectedCollection, dateFrom, dateTo, maxCloud]);
+  }, [dt.geeCollection, dt.geeDateFrom, dt.geeDateTo, dt.geeMaxCloud]);
 
   const handleLoadThumbnail = useCallback(async (item: GEESearchResult) => {
-    const map = (window as any).__PALMVIEW_MAP;
+    const map = getMap();
     if (!map || !item.thumbnail_url) return;
-
     setLoadingThumb(item.id);
     try {
-      // Use GEE thumbnail as image overlay on map
       const bounds = map.getBounds();
-      const west = bounds.getWest(), south = bounds.getSouth();
-      const east = bounds.getEast(), north = bounds.getNorth();
+      const [w, s, e, n] = item.bounds || [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+      const layerId = `gee-${item.id}-${Date.now()}`;
+      const sourceId = `src-${layerId}`;
+      const bbox: [number, number, number, number] = [w, s, e, n];
 
-      // If item has bounds, use those; otherwise use current viewport
-      const [w, s, e, n] = item.bounds || [west, south, east, north];
+      if (map.getSource(sourceId)) return;
 
-      const sourceId = `gee-${item.id}`;
-      const layerId = `gee-layer-${item.id}`;
-
-      if (map.getSource(sourceId)) {
-        // Already loaded
-        return;
+      const ok = addRasterToMap(map, layerId, sourceId, { imageUrl: item.thumbnail_url, bbox });
+      if (ok) {
+        map.fitBounds([[w, s], [e, n]], { padding: 40, maxZoom: 16 });
+        addLoadedLayer({ id: layerId, itemId: item.id, sourceId, visible: true, sourceType: 'gee', imageUrl: item.thumbnail_url, bbox });
+        console.log('[GEE] Thumbnail overlay added:', layerId);
       }
-
-      const firstSymbolId = map.getStyle()?.layers?.find((l: any) => l.type === 'symbol')?.id;
-      map.addSource(sourceId, {
-        type: 'image',
-        url: item.thumbnail_url,
-        coordinates: [[w, n], [e, n], [e, s], [w, s]]
-      });
-      map.addLayer({id: layerId, type: 'raster', source: sourceId, paint: {'raster-opacity': 0.85}}, firstSymbolId);
-      map.fitBounds([[w, s], [e, n]], {padding: 40, maxZoom: 16});
-      console.log('[GEE] Thumbnail overlay added:', layerId);
     } catch (err: any) {
       console.error('[GEE] Load thumbnail failed:', err);
     } finally {
@@ -346,87 +373,60 @@ const GEEPanel = () => {
     }
   }, []);
 
-  if (geeStatus === 'checking') {
-    return <EmptyMsg>⏳ Checking GEE connection...</EmptyMsg>;
-  }
-  if (geeStatus === 'disconnected') {
-    return <EmptyMsg>⚠️ GEE service not available. Please check backend configuration.</EmptyMsg>;
-  }
+  if (dt.geeStatus === 'checking') return <EmptyMsg>⏳ Checking GEE connection...</EmptyMsg>;
+  if (dt.geeStatus === 'disconnected') return <EmptyMsg>⚠️ GEE service not available.</EmptyMsg>;
 
   return (
     <>
       <Section>
         <SectionTitle>🌍 Google Earth Engine</SectionTitle>
-        <Badge color="#22c55e">✓ Connected</Badge>
-
+        <Badge $color="#22c55e">✓ Connected</Badge>
         <div style={{height: 8}} />
-
         <Label>Collection</Label>
-        <Select value={selectedCollection} onChange={e => setSelectedCollection(e.target.value)}>
-          {collections.map(c => (
-            <option key={c.id} value={c.id}>{c.name || c.id}</option>
-          ))}
+        <Select value={dt.geeCollection} onChange={e => updateDataTab({ geeCollection: e.target.value })}>
+          {collections.map(c => <option key={c.id} value={c.id}>{c.name || c.id}</option>)}
         </Select>
-
         <div style={{height: 6}} />
-
         <Row>
           <div style={{flex: 1}}>
             <Label>From</Label>
-            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+            <Input type="date" value={dt.geeDateFrom} onChange={e => updateDataTab({ geeDateFrom: e.target.value })} />
           </div>
           <div style={{flex: 1}}>
             <Label>To</Label>
-            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+            <Input type="date" value={dt.geeDateTo} onChange={e => updateDataTab({ geeDateTo: e.target.value })} />
           </div>
         </Row>
-
         <div style={{height: 6}} />
-
-        <Label>Max Cloud Cover: {maxCloud}%</Label>
+        <Label>Max Cloud Cover: {dt.geeMaxCloud}%</Label>
         <SliderRow>
-          <Slider
-            type="range" min={0} max={100}
-            value={maxCloud}
-            onChange={e => setMaxCloud(Number(e.target.value))}
-          />
-          <Muted>{maxCloud}%</Muted>
+          <Slider type="range" min={0} max={100} value={dt.geeMaxCloud} onChange={e => updateDataTab({ geeMaxCloud: Number(e.target.value) })} />
+          <Muted>{dt.geeMaxCloud}%</Muted>
         </SliderRow>
       </Section>
 
-      <Btn primary onClick={handleSearch} disabled={searching} style={{width: '100%'}}>
+      <Btn $primary onClick={handleSearch} disabled={searching} style={{width: '100%'}}>
         {searching ? '🔍 Searching GEE...' : '📍 Search Current View (GEE)'}
       </Btn>
-
       {searchError && <Muted style={{color: '#F9042C'}}>⚠️ {searchError}</Muted>}
 
-      {results.length > 0 && (
+      {dt.geeResults.length > 0 && (
         <Section>
-          <SectionTitle>🌍 Results ({results.length})</SectionTitle>
-          {results.map(item => {
+          <SectionTitle>🌍 Results ({dt.geeResults.length})</SectionTitle>
+          {dt.geeResults.map((item: GEESearchResult) => {
             const cc = item.cloud_cover;
             return (
               <ResultCard key={item.id}>
-                {item.thumbnail_url ? (
-                  <Thumb src={item.thumbnail_url} alt={item.id} />
-                ) : (
-                  <ThumbPlaceholder>🌍</ThumbPlaceholder>
-                )}
+                {item.thumbnail_url ? <Thumb src={item.thumbnail_url} alt={item.id} /> : <ThumbPlaceholder>🌍</ThumbPlaceholder>}
                 <div style={{flex: 1, minWidth: 0}}>
-                  <div style={{fontWeight: 500, fontSize: 11, color: '#D3D8E0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
-                    {item.id}
-                  </div>
+                  <div style={{fontWeight: 500, fontSize: 11, color: '#D3D8E0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{item.id}</div>
                   <div style={{display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap'}}>
                     <Badge>📅 {item.date}</Badge>
-                    {cc != null && (
-                      <Badge color={cc < 10 ? '#22c55e' : cc < 30 ? '#eab308' : '#F9042C'}>
-                        ☁️ {Math.round(cc)}%
-                      </Badge>
-                    )}
+                    {cc != null && <Badge $color={cc < 10 ? '#22c55e' : cc < 30 ? '#eab308' : '#F9042C'}>☁️ {Math.round(cc)}%</Badge>}
                   </div>
                   <Row style={{marginTop: 6}}>
                     {item.thumbnail_url && (
-                      <Btn small primary onClick={() => handleLoadThumbnail(item)} disabled={loadingThumb === item.id}>
+                      <Btn $small $primary onClick={() => handleLoadThumbnail(item)} disabled={loadingThumb === item.id}>
                         {loadingThumb === item.id ? '⏳...' : '🗺️ Preview on Map'}
                       </Btn>
                     )}
@@ -438,15 +438,11 @@ const GEEPanel = () => {
         </Section>
       )}
 
-      {!searching && results.length === 0 && !searchError && (
+      {!searching && dt.geeResults.length === 0 && !searchError && (
         <Section style={{textAlign: 'center', padding: '24px 16px'}}>
           <div style={{fontSize: 28, marginBottom: 8}}>🌍</div>
-          <div style={{color: '#D3D8E0', fontSize: 12, fontWeight: 500, marginBottom: 6}}>
-            Ready to search Earth Engine
-          </div>
-          <EmptyMsg style={{textAlign: 'center', padding: 0}}>
-            Navigate the map to your area of interest, then click "Search Current View" to find satellite imagery.
-          </EmptyMsg>
+          <div style={{color: '#D3D8E0', fontSize: 12, fontWeight: 500, marginBottom: 6}}>Ready to search Earth Engine</div>
+          <EmptyMsg style={{textAlign: 'center', padding: 0}}>Navigate the map to your area of interest, then click "Search Current View".</EmptyMsg>
         </Section>
       )}
     </>
@@ -456,34 +452,19 @@ const GEEPanel = () => {
 // ─── Data Panel Content ──────────────────────────────
 
 const DataPanelContent = () => {
-  // Source toggle
-  const [source, setSource] = useState<'stac' | 'gee' | 'local'>('stac');
-
-  // Local upload state
+  const dt = useDataTab();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
 
-  // STAC state
+  // Local ephemeral state (OK to lose)
   const [providers, setProviders] = useState<Record<string, STACProvider>>({});
-  const [selectedProvider, setSelectedProvider] = useState('planetary-computer');
   const [collections, setCollections] = useState<STACCollection[]>([]);
-  const [selectedCollection, setSelectedCollection] = useState('sentinel-2-l2a');
-  const [dateFrom, setDateFrom] = useState('2025-01-01');
-  const [dateTo, setDateTo] = useState('2025-12-31');
-  const [maxCloud, setMaxCloud] = useState(30);
-  const [bboxStr, setBboxStr] = useState('103.6,1.2,104.0,1.45'); // Singapore default
-
-  // Results
-  const [results, setResults] = useState<STACSearchItem[]>([]);
   const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-
-  // Download/Load state
   const [downloading, setDownloading] = useState<string | null>(null);
-  // Loaded raster layers (managed outside Kepler)
-  const [loadedLayers, setLoadedLayers] = useState<Array<{id: string; itemId: string; visible: boolean}>>([]);
 
-  // Load providers
+  // Attach style listener on mount
+  useEffect(() => { attachStyleListener(); }, []);
+
+  // Load providers once
   useEffect(() => {
     fetch(`${API_BASE}/api/v1/data/stac/providers`)
       .then(r => r.json())
@@ -493,151 +474,127 @@ const DataPanelContent = () => {
 
   // Load collections when provider changes
   useEffect(() => {
-    if (!selectedProvider) return;
+    if (!dt.selectedProvider) return;
     setCollections([]);
-    fetch(`${API_BASE}/api/v1/data/stac/${selectedProvider}/collections`)
+    fetch(`${API_BASE}/api/v1/data/stac/${dt.selectedProvider}/collections`)
       .then(r => r.json())
       .then(data => {
         const cols = Array.isArray(data) ? data : [];
         setCollections(cols);
-        // Auto-select first popular or first available
-        const popular = providers[selectedProvider]?.popular_collections;
+        const popular = providers[dt.selectedProvider]?.popular_collections;
         if (popular?.length) {
           const match = cols.find((c: any) => popular.includes(typeof c === 'string' ? c : c.id));
-          if (match) setSelectedCollection(typeof match === 'string' ? match : match.id);
+          if (match) updateDataTab({ selectedCollection: typeof match === 'string' ? match : match.id });
         }
       })
       .catch(console.error);
-  }, [selectedProvider, providers]);
+  }, [dt.selectedProvider, providers]);
 
   // Search
   const handleSearch = useCallback(async () => {
     setSearching(true);
-    setSearchError(null);
-    setResults([]);
+    updateDataTab({ searchError: null, results: [] });
     try {
-      const bbox = bboxStr.split(',').map(Number);
+      const bbox = dt.bboxStr.split(',').map(Number);
       if (bbox.length !== 4 || bbox.some(isNaN)) throw new Error('Invalid bbox format');
-
-      const url = new URL(`${API_BASE}/api/v1/data/stac/${selectedProvider}/search`);
-      url.searchParams.set('collection', selectedCollection);
+      const url = new URL(`${API_BASE}/api/v1/data/stac/${dt.selectedProvider}/search`);
+      url.searchParams.set('collection', dt.selectedCollection);
       url.searchParams.set('bbox', bbox.join(','));
-      url.searchParams.set('datetime', `${dateFrom}/${dateTo}`);
+      url.searchParams.set('datetime', `${dt.dateFrom}/${dt.dateTo}`);
       url.searchParams.set('limit', '20');
 
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error(`Search failed: ${res.status}`);
       const data = await res.json();
-
-      let items: STACSearchItem[] = Array.isArray(data) ? data :
-        data.features || data.items || [];
-
-      // Filter by cloud cover client-side
+      let items: STACSearchItemPersist[] = Array.isArray(data) ? data : data.features || data.items || [];
       items = items.filter(item => {
         const cc = getCloudCover(item.properties);
-        return cc === null || cc <= maxCloud;
+        return cc === null || cc <= dt.maxCloud;
       });
-
-      setResults(items);
+      updateDataTab({ results: items });
     } catch (err: any) {
-      setSearchError(err.message);
+      updateDataTab({ searchError: err.message });
     } finally {
       setSearching(false);
     }
-  }, [selectedProvider, selectedCollection, bboxStr, dateFrom, dateTo, maxCloud]);
+  }, [dt.selectedProvider, dt.selectedCollection, dt.bboxStr, dt.dateFrom, dt.dateTo, dt.maxCloud]);
 
-  // Load raster to map via mapbox raster source
-  // Kepler can't handle GeoTIFF natively — use mapbox addSource/addLayer (#90)
-  const handleLoadToMap = useCallback(async (item: STACSearchItem) => {
-    const map = (window as any).__PALMVIEW_MAP;
+  // Load raster to map
+  const handleLoadToMap = useCallback(async (item: STACSearchItemPersist) => {
+    const map = getMap();
     if (!map) {
-      console.error('[Data] Map ref not available — cannot load raster layer');
+      console.error('[Data] Map ref not available');
       return;
     }
-
     setDownloading(item.id);
     try {
       const layerId = `stac-${item.id}-${Date.now()}`;
       const sourceId = `src-${layerId}`;
-
-      // Find the first symbol layer to insert raster beneath labels but above basemap
-      const firstSymbolId = map.getStyle()?.layers?.find((l: any) => l.type === 'symbol')?.id;
+      let loaded = false;
+      let tileUrl: string | undefined;
+      let imageUrl: string | undefined;
+      let bbox: [number, number, number, number] | undefined = item.bbox as any;
 
       // 1. Try tile URL from backend
-      let loaded = false;
       try {
         const res = await fetch(
-          `${API_BASE}/api/v1/data/stac/${selectedProvider}/${selectedCollection}/${item.id}/tile-url?asset_key=visual`
+          `${API_BASE}/api/v1/data/stac/${dt.selectedProvider}/${dt.selectedCollection}/${item.id}/tile-url?asset_key=visual`
         );
         if (res.ok) {
           const data = await res.json();
-          const tileUrl = data.tile_url || data.url;
+          tileUrl = data.tile_url || data.url;
           if (tileUrl) {
-            console.log('[Data] Adding raster tile source:', tileUrl);
-            map.addSource(sourceId, {type: 'raster', tiles: [tileUrl], tileSize: 256});
-            map.addLayer({id: layerId, type: 'raster', source: sourceId, paint: {'raster-opacity': 0.85}}, firstSymbolId);
-            loaded = true;
-            console.log('[Data] Raster tile layer added:', layerId);
+            console.log('[Data] Map instance:', map.constructor?.name);
+            loaded = addRasterToMap(map, layerId, sourceId, { tileUrl });
+            if (loaded) console.log('[Data] Raster tile layer added:', layerId);
           }
         }
       } catch (e) {
-        console.warn('[Data] tile-url fallback:', e);
+        console.warn('[Data] tile-url attempt failed:', e);
       }
 
-      // 2. Fallback: COG asset href as image overlay
-      if (!loaded) {
-        const cogHref = item.assets?.visual?.href || item.assets?.rendered_preview?.href || item.assets?.['B04']?.href;
-        if (cogHref && item.bbox) {
-          const [west, south, east, north] = item.bbox;
-          console.log('[Data] Adding image overlay:', cogHref, 'bbox:', item.bbox);
-          map.addSource(sourceId, {
-            type: 'image',
-            url: cogHref,
-            coordinates: [[west, north], [east, north], [east, south], [west, south]]
-          });
-          map.addLayer({id: layerId, type: 'raster', source: sourceId, paint: {'raster-opacity': 0.85}}, firstSymbolId);
-          loaded = true;
-          console.log('[Data] Image overlay added:', layerId);
+      // 2. Fallback: thumbnail or rendered_preview as image overlay
+      if (!loaded && item.bbox) {
+        const thumbUrl = getThumbnail(item);
+        const cogHref = item.assets?.visual?.href || item.assets?.rendered_preview?.href || thumbUrl;
+        if (cogHref) {
+          imageUrl = cogHref;
+          console.log('[Data] Fallback image overlay:', cogHref, 'bbox:', item.bbox);
+          loaded = addRasterToMap(map, layerId, sourceId, { imageUrl: cogHref, bbox });
+          if (loaded) console.log('[Data] Image overlay added:', layerId);
         }
       }
 
-      if (!loaded) throw new Error('No tile URL or COG asset available');
+      if (!loaded) throw new Error('No tile URL or image asset available');
 
       // 3. Fly to data extent
       if (item.bbox) {
         const [west, south, east, north] = item.bbox;
-        map.fitBounds([[west, south], [east, north]], {padding: 40, maxZoom: 16});
+        map.fitBounds([[west, south], [east, north]], { padding: 50, maxZoom: 16 });
         console.log('[Data] fitBounds to:', item.bbox);
       }
 
-      setLoadedLayers(prev => [...prev, {id: layerId, itemId: item.id, visible: true}]);
-
+      addLoadedLayer({ id: layerId, itemId: item.id, sourceId, visible: true, sourceType: 'stac', tileUrl, imageUrl, bbox });
     } catch (err: any) {
       console.error('[Data] Load to map failed:', err);
     } finally {
       setDownloading(null);
     }
-  }, [selectedProvider, selectedCollection]);
+  }, [dt.selectedProvider, dt.selectedCollection]);
 
-  // Handle local GeoTIFF upload
+  // Local GeoTIFF upload
   const handleLocalUpload = useCallback(async (file: File) => {
-    const map = (window as any).__PALMVIEW_MAP;
+    const map = getMap();
     if (!map) {
-      setUploadStatus('❌ Map not ready');
+      updateDataTab({ uploadStatus: '❌ Map not ready' });
       return;
     }
-    setUploadStatus(`⏳ Reading ${file.name}...`);
+    updateDataTab({ uploadStatus: `⏳ Reading ${file.name}...` });
     try {
       const arrayBuffer = await file.arrayBuffer();
       const tiff = await fromArrayBuffer(arrayBuffer);
       const image = await tiff.getImage();
-
-      // Get bbox from GeoTIFF metadata
-      const bbox = image.getBoundingBox(); // [west, south, east, north]
-      const [west, south, east, north] = bbox;
-      console.log('[Upload] GeoTIFF bbox:', bbox, 'size:', image.getWidth(), 'x', image.getHeight());
-
-      // Read raster data and render to canvas
+      const [west, south, east, north] = image.getBoundingBox();
       const width = image.getWidth();
       const height = image.getHeight();
       const samplesPerPixel = image.getSamplesPerPixel();
@@ -650,7 +607,6 @@ const DataPanelContent = () => {
       const imgData = ctx.createImageData(width, height);
 
       if (samplesPerPixel >= 3) {
-        // RGB(A)
         for (let i = 0; i < width * height; i++) {
           imgData.data[i * 4] = (rasters[0] as any)[i];
           imgData.data[i * 4 + 1] = (rasters[1] as any)[i];
@@ -658,11 +614,10 @@ const DataPanelContent = () => {
           imgData.data[i * 4 + 3] = samplesPerPixel >= 4 ? (rasters[3] as any)[i] : 255;
         }
       } else {
-        // Single band — grayscale, auto-stretch
         const band = rasters[0] as any;
         let min = Infinity, max = -Infinity;
         for (let i = 0; i < band.length; i++) {
-          if (band[i] !== 0) { // skip nodata=0
+          if (band[i] !== 0) {
             if (band[i] < min) min = band[i];
             if (band[i] > max) max = band[i];
           }
@@ -679,66 +634,78 @@ const DataPanelContent = () => {
 
       ctx.putImageData(imgData, 0, 0);
       const dataUrl = canvas.toDataURL('image/png');
-
       const layerId = `local-${Date.now()}`;
       const sourceId = `src-${layerId}`;
-      const firstSymbolId = map.getStyle()?.layers?.find((l: any) => l.type === 'symbol')?.id;
+      const bbox: [number, number, number, number] = [west, south, east, north];
 
-      map.addSource(sourceId, {
-        type: 'image',
-        url: dataUrl,
-        coordinates: [[west, north], [east, north], [east, south], [west, south]]
-      });
-      map.addLayer({id: layerId, type: 'raster', source: sourceId, paint: {'raster-opacity': 0.85}}, firstSymbolId);
-      map.fitBounds([[west, south], [east, north]], {padding: 40, maxZoom: 16});
-
-      setLoadedLayers(prev => [...prev, {id: layerId, itemId: file.name, visible: true}]);
-      setUploadStatus(`✅ ${file.name} loaded`);
-      console.log('[Upload] Local GeoTIFF loaded:', file.name, 'layer:', layerId);
+      const ok = addRasterToMap(map, layerId, sourceId, { imageUrl: dataUrl, bbox });
+      if (ok) {
+        map.fitBounds([[west, south], [east, north]], { padding: 50, maxZoom: 16 });
+        addLoadedLayer({ id: layerId, itemId: file.name, sourceId, visible: true, sourceType: 'local', imageUrl: dataUrl, bbox });
+        updateDataTab({ uploadStatus: `✅ ${file.name} loaded` });
+        console.log('[Upload] Local GeoTIFF loaded:', file.name);
+      } else {
+        throw new Error('Failed to add to map');
+      }
     } catch (err: any) {
       console.error('[Upload] Failed:', err);
-      setUploadStatus(`❌ ${err.message}`);
+      updateDataTab({ uploadStatus: `❌ ${err.message}` });
     }
   }, []);
 
-  // Remove loaded layer from mapbox + state
-  const handleRemoveLayer = useCallback((layerId: string) => {
+  // Remove layer
+  const handleRemoveLayer = useCallback((layer: LoadedLayerInfo) => {
     const map = (window as any).__PALMVIEW_MAP;
     if (map) {
       try {
-        if (map.getLayer(layerId)) map.removeLayer(layerId);
-        const sourceId = `src-${layerId}`;
-        if (map.getSource(sourceId)) map.removeSource(sourceId);
+        if (map.getLayer(layer.id)) map.removeLayer(layer.id);
+        if (map.getSource(layer.sourceId)) map.removeSource(layer.sourceId);
       } catch (e) {
         console.warn('[Data] Error removing layer:', e);
       }
     }
-    setLoadedLayers(prev => prev.filter(l => l.id !== layerId));
+    removeLoadedLayer(layer.id);
   }, []);
+
+  // ─── Loaded Layers Section (shared across all sources) ───
+  const LoadedLayersSection = dt.loadedLayers.length > 0 ? (
+    <Section>
+      <SectionTitle>🗺️ Loaded Layers ({dt.loadedLayers.length})</SectionTitle>
+      {dt.loadedLayers.map(layer => (
+        <Row key={layer.id} style={{justifyContent: 'space-between', padding: '4px 0'}}>
+          <Muted style={{fontSize: 11}}>
+            {layer.sourceType === 'gee' ? '🌍' : layer.sourceType === 'local' ? '📁' : '🛰'}{' '}
+            {layer.itemId}
+          </Muted>
+          <Btn $small $danger onClick={() => handleRemoveLayer(layer)}>✕</Btn>
+        </Row>
+      ))}
+    </Section>
+  ) : null;
 
   return (
     <Panel>
-      {/* Source Toggle */}
+      {/* Source Toggle — always visible */}
       <SourceToggle>
-        <SourceBtn active={source === 'stac'} onClick={() => setSource('stac')}>
+        <SourceBtn $active={dt.source === 'stac'} onClick={() => updateDataTab({ source: 'stac' })}>
           🛰 STAC
         </SourceBtn>
-        <SourceBtn active={source === 'gee'} onClick={() => setSource('gee')}>
+        <SourceBtn $active={dt.source === 'gee'} onClick={() => updateDataTab({ source: 'gee' })}>
           🌍 GEE
         </SourceBtn>
-        <SourceBtn active={source === 'local'} onClick={() => setSource('local')}>
+        <SourceBtn $active={dt.source === 'local'} onClick={() => updateDataTab({ source: 'local' })}>
           📁 Local
         </SourceBtn>
       </SourceToggle>
 
-      {source === 'gee' ? (
+      {dt.source === 'gee' ? (
         <GEEPanel />
-      ) : source === 'local' ? (
+      ) : dt.source === 'local' ? (
         <>
           <Section>
             <SectionTitle>📁 Upload Local GeoTIFF</SectionTitle>
             <EmptyMsg style={{padding: '8px 0'}}>
-              Upload a .tif / .tiff file to display on the map. Supports single-band (grayscale) and RGB GeoTIFFs with geographic coordinates.
+              Upload a .tif / .tiff file to display on the map.
             </EmptyMsg>
             <input
               ref={fileInputRef}
@@ -751,46 +718,28 @@ const DataPanelContent = () => {
                 e.target.value = '';
               }}
             />
-            <Btn primary style={{width: '100%'}} onClick={() => fileInputRef.current?.click()}>
+            <Btn $primary style={{width: '100%'}} onClick={() => fileInputRef.current?.click()}>
               📂 Choose GeoTIFF File
             </Btn>
-            {uploadStatus && (
-              <div style={{marginTop: 8, fontSize: 11}}>{uploadStatus}</div>
-            )}
+            {dt.uploadStatus && <div style={{marginTop: 8, fontSize: 11}}>{dt.uploadStatus}</div>}
           </Section>
-
-          {/* Loaded Layers (shared) */}
-          {loadedLayers.length > 0 && (
-            <Section>
-              <SectionTitle>🗺️ Loaded Layers ({loadedLayers.length})</SectionTitle>
-              {loadedLayers.map(layer => (
-                <Row key={layer.id} style={{justifyContent: 'space-between', padding: '4px 0'}}>
-                  <Muted style={{fontSize: 11}}>{layer.itemId}</Muted>
-                  <Btn small danger onClick={() => handleRemoveLayer(layer.id)}>✕</Btn>
-                </Row>
-              ))}
-            </Section>
-          )}
+          {LoadedLayersSection}
         </>
       ) : (
         <>
-          {/* Provider + Collection */}
+          {/* STAC Provider + Collection */}
           <Section>
             <SectionTitle>Data Source</SectionTitle>
-
             <Label>Provider</Label>
-            <Select value={selectedProvider} onChange={e => setSelectedProvider(e.target.value)}>
+            <Select value={dt.selectedProvider} onChange={e => updateDataTab({ selectedProvider: e.target.value })}>
               {Object.entries(providers).map(([key, p]) => (
                 <option key={key} value={key}>{p.name}</option>
               ))}
             </Select>
-
             <div style={{height: 6}} />
-
             <Label>Collection</Label>
-            <Select value={selectedCollection} onChange={e => setSelectedCollection(e.target.value)}>
-              {/* Popular collections first */}
-              {providers[selectedProvider]?.popular_collections?.map(c => (
+            <Select value={dt.selectedCollection} onChange={e => updateDataTab({ selectedCollection: e.target.value })}>
+              {providers[dt.selectedProvider]?.popular_collections?.map(c => (
                 <option key={c} value={c}>⭐ {c}</option>
               ))}
               <option disabled>──────────</option>
@@ -805,111 +754,80 @@ const DataPanelContent = () => {
           {/* Search Parameters */}
           <Section>
             <SectionTitle>🔍 Search Parameters</SectionTitle>
-
             <Label>Bounding Box (west, south, east, north)</Label>
             <Row>
               <Input
                 style={{flex: 1}}
-                value={bboxStr}
-                onChange={e => setBboxStr(e.target.value)}
+                value={dt.bboxStr}
+                onChange={e => updateDataTab({ bboxStr: e.target.value })}
                 placeholder="103.6,1.2,104.0,1.45"
               />
-              <Btn small onClick={() => {
+              <Btn $small onClick={() => {
                 const map = (window as any).__PALMVIEW_MAP;
                 if (map) {
                   const bounds = map.getBounds();
-                  const bbox = [
-                    bounds.getWest().toFixed(4),
-                    bounds.getSouth().toFixed(4),
-                    bounds.getEast().toFixed(4),
-                    bounds.getNorth().toFixed(4),
-                  ].join(',');
-                  setBboxStr(bbox);
-                } else {
-                  console.warn('[Data] Map ref not available yet');
+                  updateDataTab({
+                    bboxStr: [
+                      bounds.getWest().toFixed(4),
+                      bounds.getSouth().toFixed(4),
+                      bounds.getEast().toFixed(4),
+                      bounds.getNorth().toFixed(4),
+                    ].join(',')
+                  });
                 }
               }} title="Use current map view">
                 📍 Current View
               </Btn>
             </Row>
-
             <div style={{height: 6}} />
-
             <Row>
               <div style={{flex: 1}}>
                 <Label>From</Label>
-                <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+                <Input type="date" value={dt.dateFrom} onChange={e => updateDataTab({ dateFrom: e.target.value })} />
               </div>
               <div style={{flex: 1}}>
                 <Label>To</Label>
-                <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+                <Input type="date" value={dt.dateTo} onChange={e => updateDataTab({ dateTo: e.target.value })} />
               </div>
             </Row>
-
             <div style={{height: 6}} />
-
-            <Label>Max Cloud Cover: {maxCloud}%</Label>
+            <Label>Max Cloud Cover: {dt.maxCloud}%</Label>
             <SliderRow>
-              <Slider
-                type="range"
-                min={0}
-                max={100}
-                value={maxCloud}
-                onChange={e => setMaxCloud(Number(e.target.value))}
-              />
-              <Muted>{maxCloud}%</Muted>
+              <Slider type="range" min={0} max={100} value={dt.maxCloud} onChange={e => updateDataTab({ maxCloud: Number(e.target.value) })} />
+              <Muted>{dt.maxCloud}%</Muted>
             </SliderRow>
           </Section>
 
-          {/* Search Button */}
-          <Btn primary onClick={handleSearch} disabled={searching} style={{width: '100%'}}>
+          <Btn $primary onClick={handleSearch} disabled={searching} style={{width: '100%'}}>
             {searching ? '🔍 Searching...' : '🔍 Search Satellite Data'}
           </Btn>
-
-          {searchError && <Muted style={{color: '#F9042C'}}>⚠️ {searchError}</Muted>}
+          {dt.searchError && <Muted style={{color: '#F9042C'}}>⚠️ {dt.searchError}</Muted>}
 
           {/* Results */}
-          {results.length > 0 && (
+          {dt.results.length > 0 && (
             <Section>
-              <SectionTitle>📡 Results ({results.length})</SectionTitle>
-              {results.map(item => {
+              <SectionTitle>📡 Results ({dt.results.length})</SectionTitle>
+              {dt.results.map(item => {
                 const thumb = getThumbnail(item);
                 const cc = getCloudCover(item.properties);
                 const isDownloading = downloading === item.id;
-
+                const isLoaded = dt.loadedLayers.some(l => l.itemId === item.id);
                 return (
                   <ResultCard key={item.id}>
-                    {thumb ? (
-                      <Thumb src={thumb} alt={item.id} />
-                    ) : (
-                      <ThumbPlaceholder>🛰</ThumbPlaceholder>
-                    )}
+                    {thumb ? <Thumb src={thumb} alt={item.id} /> : <ThumbPlaceholder>🛰</ThumbPlaceholder>}
                     <div style={{flex: 1, minWidth: 0}}>
-                      <div style={{
-                        fontWeight: 500,
-                        fontSize: 11,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        color: '#D3D8E0'
-                      }}>
+                      <div style={{fontWeight: 500, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#D3D8E0'}}>
                         {item.id}
                       </div>
                       <div style={{display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap'}}>
                         <Badge>📅 {formatDate(item.datetime)}</Badge>
-                        {cc !== null && (
-                          <Badge color={cc < 10 ? '#22c55e' : cc < 30 ? '#eab308' : '#F9042C'}>
-                            ☁️ {Math.round(cc)}%
-                          </Badge>
-                        )}
+                        {cc !== null && <Badge $color={cc < 10 ? '#22c55e' : cc < 30 ? '#eab308' : '#F9042C'}>☁️ {Math.round(cc)}%</Badge>}
                       </div>
                       <Row style={{marginTop: 6}}>
-                        <Btn small primary onClick={() => handleLoadToMap(item)} disabled={isDownloading}>
+                        <Btn $small $primary onClick={() => handleLoadToMap(item)} disabled={isDownloading}>
                           {isDownloading ? '⏳ Loading...' : '🗺️ Load to Map'}
                         </Btn>
-                        {loadedLayers.some(l => l.itemId === item.id) && (
-                          <Badge color="#1FBF6E">✓ Loaded</Badge>
-                        )}
+                        {isLoaded && <Badge $color="#1FBF6E">✓ Loaded</Badge>}
                       </Row>
                     </div>
                   </ResultCard>
@@ -918,28 +836,14 @@ const DataPanelContent = () => {
             </Section>
           )}
 
-          {/* Loaded Raster Layers */}
-          {loadedLayers.length > 0 && (
-            <Section>
-              <SectionTitle>🗺️ Loaded Layers ({loadedLayers.length})</SectionTitle>
-              {loadedLayers.map(layer => (
-                <Row key={layer.id} style={{justifyContent: 'space-between', padding: '4px 0'}}>
-                  <Muted style={{fontSize: 11}}>{layer.itemId}</Muted>
-                  <Btn small danger onClick={() => handleRemoveLayer(layer.id)}>✕</Btn>
-                </Row>
-              ))}
-            </Section>
-          )}
+          {LoadedLayersSection}
 
-          {!searching && results.length === 0 && !searchError && (
+          {!searching && dt.results.length === 0 && !dt.searchError && (
             <Section style={{textAlign: 'center', padding: '24px 16px'}}>
               <div style={{fontSize: 28, marginBottom: 8}}>🛰️</div>
-              <div style={{color: '#D3D8E0', fontSize: 12, fontWeight: 500, marginBottom: 6}}>
-                No satellite imagery loaded yet
-              </div>
+              <div style={{color: '#D3D8E0', fontSize: 12, fontWeight: 500, marginBottom: 6}}>No satellite imagery loaded yet</div>
               <EmptyMsg style={{textAlign: 'center', padding: 0}}>
-                Choose a provider and collection above, then click "Search Satellite Data" to find imagery for your area.
-                Use 📍 Current View to auto-fill the bounding box from the map.
+                Choose a provider and collection above, then click "Search Satellite Data" to find imagery.
               </EmptyMsg>
             </Section>
           )}
@@ -953,15 +857,11 @@ const DataPanelContent = () => {
 
 const DataIcon = (props: any) => (
   <svg viewBox="0 0 24 24" width={props.height || '18px'} height={props.height || '18px'} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
-    {/* Satellite body */}
     <rect x="9" y="9" width="6" height="6" rx="1" strokeWidth="1.5" />
-    {/* Solar panels */}
     <path d="M3 8h4v8H3zM17 8h4v8h-4z" strokeWidth="1.5" />
     <path d="M7 12H9M15 12h2" strokeWidth="1.5" />
-    {/* Antenna */}
     <path d="M12 9V5" strokeWidth="1.5" />
     <circle cx="12" cy="4" r="1" strokeWidth="1" />
-    {/* Signal waves */}
     <path d="M10 19c1-1 3-1 4 0" strokeWidth="1" opacity="0.5" />
     <path d="M8 21c2-2 6-2 8 0" strokeWidth="1" opacity="0.35" />
   </svg>

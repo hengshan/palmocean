@@ -1,6 +1,7 @@
 /**
  * PalmView Raster Layer State Management
  * Manages raster layers loaded from STAC/GEE onto the Mapbox map.
+ * Also manages Data Tab UI state so it persists across panel switches.
  * Author: IRIS · 2026-02-21
  */
 
@@ -12,37 +13,100 @@ export interface RasterLayer {
   id: string;
   name: string;
   sourceType: RasterSourceType;
-  /** Original URL (COG, tile endpoint, etc.) */
   sourceUrl: string;
-  /** Bounding box [west, south, east, north] */
   bbox: [number, number, number, number];
   visible: boolean;
   opacity: number;
-  /** ISO-8601 timestamp of the source imagery */
   acquisitionDate?: string;
-  /** STAC collection / GEE asset id */
   collectionId?: string;
-  /** Thumbnail URL for the panel list */
   thumbnailUrl?: string;
-  /** Metadata from search result */
   metadata?: Record<string, unknown>;
-  /** Timestamp when added to map */
   addedAt: number;
 }
 
 export interface AoiState {
-  /** Current AOI mode */
   mode: 'idle' | 'drawing' | 'drawn' | 'editing';
-  /** GeoJSON geometry of the AOI, null when idle */
   geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon | null;
+}
+
+// ── Data Tab UI State (persists across panel switches) ──
+
+export interface STACSearchItemPersist {
+  id: string;
+  collection: string;
+  datetime: string;
+  bbox: number[];
+  properties: Record<string, any>;
+  assets: Record<string, { href: string; type?: string; title?: string }>;
+  links?: Array<{ rel: string; href: string }>;
+}
+
+export interface LoadedLayerInfo {
+  id: string;
+  itemId: string;
+  sourceId: string;
+  visible: boolean;
+  sourceType: RasterSourceType;
+  /** Info needed to re-add layer after style change */
+  tileUrl?: string;
+  imageUrl?: string;
+  bbox?: [number, number, number, number];
+}
+
+export interface DataTabState {
+  source: 'stac' | 'gee' | 'local';
+  // STAC search params
+  selectedProvider: string;
+  selectedCollection: string;
+  dateFrom: string;
+  dateTo: string;
+  maxCloud: number;
+  bboxStr: string;
+  // STAC results
+  results: STACSearchItemPersist[];
+  searchError: string | null;
+  // Loaded layers (across all sources)
+  loadedLayers: LoadedLayerInfo[];
+  // Upload status
+  uploadStatus: string | null;
+  // GEE state
+  geeResults: any[];
+  geeCollection: string;
+  geeDateFrom: string;
+  geeDateTo: string;
+  geeMaxCloud: number;
+  geeStatus: 'checking' | 'connected' | 'disconnected';
 }
 
 export interface PalmviewMapState {
   rasterLayers: RasterLayer[];
   aoiState: AoiState;
+  dataTab: DataTabState;
 }
 
 // ── Initial State ────────────────────────────────────
+
+function createInitialDataTabState(): DataTabState {
+  return {
+    source: 'stac',
+    selectedProvider: 'planetary-computer',
+    selectedCollection: 'sentinel-2-l2a',
+    dateFrom: '2025-01-01',
+    dateTo: '2025-12-31',
+    maxCloud: 30,
+    bboxStr: '103.6,1.2,104.0,1.45',
+    results: [],
+    searchError: null,
+    loadedLayers: [],
+    uploadStatus: null,
+    geeResults: [],
+    geeCollection: 'COPERNICUS/S2_SR_HARMONIZED',
+    geeDateFrom: '2025-01-01',
+    geeDateTo: '2025-12-31',
+    geeMaxCloud: 30,
+    geeStatus: 'checking',
+  };
+}
 
 export function createInitialMapState(): PalmviewMapState {
   return {
@@ -51,10 +115,11 @@ export function createInitialMapState(): PalmviewMapState {
       mode: 'idle',
       geometry: null,
     },
+    dataTab: createInitialDataTabState(),
   };
 }
 
-// ── Singleton store (simple, no Redux dependency) ────
+// ── Singleton store ──────────────────────────────────
 
 let _state: PalmviewMapState = createInitialMapState();
 const _listeners: Set<(s: PalmviewMapState) => void> = new Set();
@@ -70,6 +135,97 @@ export function getMapState(): PalmviewMapState {
 export function subscribe(fn: (s: PalmviewMapState) => void): () => void {
   _listeners.add(fn);
   return () => _listeners.delete(fn);
+}
+
+// ── Data Tab Actions ─────────────────────────────────
+
+export function updateDataTab(partial: Partial<DataTabState>): void {
+  _state = {
+    ..._state,
+    dataTab: { ..._state.dataTab, ...partial },
+  };
+  _notify();
+}
+
+export function addLoadedLayer(layer: LoadedLayerInfo): void {
+  _state = {
+    ..._state,
+    dataTab: {
+      ..._state.dataTab,
+      loadedLayers: [..._state.dataTab.loadedLayers, layer],
+    },
+  };
+  _notify();
+}
+
+export function removeLoadedLayer(layerId: string): void {
+  _state = {
+    ..._state,
+    dataTab: {
+      ..._state.dataTab,
+      loadedLayers: _state.dataTab.loadedLayers.filter((l) => l.id !== layerId),
+    },
+  };
+  _notify();
+}
+
+// ── Map Layer Re-add (after style change) ────────────
+
+export function reAddAllLayers(): void {
+  const map = (window as any).__PALMVIEW_MAP;
+  if (!map) return;
+
+  const layers = _state.dataTab.loadedLayers;
+  if (layers.length === 0) return;
+
+  console.log('[raster-state] Re-adding', layers.length, 'layers after style change');
+
+  // Wait a tick for style to be fully loaded
+  setTimeout(() => {
+    const firstSymbolId = map.getStyle()?.layers?.find((l: any) => l.type === 'symbol')?.id;
+
+    for (const layer of layers) {
+      try {
+        if (map.getSource(layer.sourceId)) continue; // already exists
+
+        if (layer.tileUrl) {
+          map.addSource(layer.sourceId, { type: 'raster', tiles: [layer.tileUrl], tileSize: 256 });
+        } else if (layer.imageUrl && layer.bbox) {
+          const [west, south, east, north] = layer.bbox;
+          map.addSource(layer.sourceId, {
+            type: 'image',
+            url: layer.imageUrl,
+            coordinates: [[west, north], [east, north], [east, south], [west, south]],
+          });
+        } else {
+          console.warn('[raster-state] Cannot re-add layer, no URL:', layer.id);
+          continue;
+        }
+
+        map.addLayer(
+          { id: layer.id, type: 'raster', source: layer.sourceId, paint: { 'raster-opacity': 0.85 } },
+          firstSymbolId
+        );
+        console.log('[raster-state] Re-added layer:', layer.id);
+      } catch (e) {
+        console.warn('[raster-state] Failed to re-add layer:', layer.id, e);
+      }
+    }
+  }, 100);
+}
+
+// Setup style.load listener (call once when map is available)
+let _styleListenerAttached = false;
+export function attachStyleListener(): void {
+  if (_styleListenerAttached) return;
+  const map = (window as any).__PALMVIEW_MAP;
+  if (!map) return;
+  _styleListenerAttached = true;
+  map.on('style.load', () => {
+    console.log('[raster-state] style.load detected, re-adding layers...');
+    reAddAllLayers();
+  });
+  console.log('[raster-state] style.load listener attached');
 }
 
 // ── Raster Layer Actions ─────────────────────────────
