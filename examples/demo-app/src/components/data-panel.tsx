@@ -1,7 +1,8 @@
 // Data Tab — Satellite Data Search, Download & Load to Map
-// STAC search (Planetary Computer, Earth Search, Copernicus) + future GEE
-import React, {useState, useEffect, useCallback} from 'react';
+// STAC search (Planetary Computer, Earth Search, Copernicus) + GEE + Local Upload
+import React, {useState, useEffect, useCallback, useRef} from 'react';
 import styled from 'styled-components';
+import {fromArrayBuffer} from 'geotiff';
 
 const API_BASE =
   (typeof process !== 'undefined' && process.env?.PALMVIEW_API_URL) ||
@@ -329,12 +330,14 @@ const GEEPanel = () => {
         return;
       }
 
+      const firstSymbolId = map.getStyle()?.layers?.find((l: any) => l.type === 'symbol')?.id;
       map.addSource(sourceId, {
         type: 'image',
         url: item.thumbnail_url,
         coordinates: [[w, n], [e, n], [e, s], [w, s]]
       });
-      map.addLayer({id: layerId, type: 'raster', source: sourceId});
+      map.addLayer({id: layerId, type: 'raster', source: sourceId, paint: {'raster-opacity': 0.85}}, firstSymbolId);
+      map.fitBounds([[w, s], [e, n]], {padding: 40, maxZoom: 16});
       console.log('[GEE] Thumbnail overlay added:', layerId);
     } catch (err: any) {
       console.error('[GEE] Load thumbnail failed:', err);
@@ -454,7 +457,11 @@ const GEEPanel = () => {
 
 const DataPanelContent = () => {
   // Source toggle
-  const [source, setSource] = useState<'stac' | 'gee'>('stac');
+  const [source, setSource] = useState<'stac' | 'gee' | 'local'>('stac');
+
+  // Local upload state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
 
   // STAC state
   const [providers, setProviders] = useState<Record<string, STACProvider>>({});
@@ -553,6 +560,9 @@ const DataPanelContent = () => {
       const layerId = `stac-${item.id}-${Date.now()}`;
       const sourceId = `src-${layerId}`;
 
+      // Find the first symbol layer to insert raster beneath labels but above basemap
+      const firstSymbolId = map.getStyle()?.layers?.find((l: any) => l.type === 'symbol')?.id;
+
       // 1. Try tile URL from backend
       let loaded = false;
       try {
@@ -563,8 +573,9 @@ const DataPanelContent = () => {
           const data = await res.json();
           const tileUrl = data.tile_url || data.url;
           if (tileUrl) {
+            console.log('[Data] Adding raster tile source:', tileUrl);
             map.addSource(sourceId, {type: 'raster', tiles: [tileUrl], tileSize: 256});
-            map.addLayer({id: layerId, type: 'raster', source: sourceId});
+            map.addLayer({id: layerId, type: 'raster', source: sourceId, paint: {'raster-opacity': 0.85}}, firstSymbolId);
             loaded = true;
             console.log('[Data] Raster tile layer added:', layerId);
           }
@@ -575,21 +586,29 @@ const DataPanelContent = () => {
 
       // 2. Fallback: COG asset href as image overlay
       if (!loaded) {
-        const cogHref = item.assets?.visual?.href || item.assets?.['B04']?.href;
+        const cogHref = item.assets?.visual?.href || item.assets?.rendered_preview?.href || item.assets?.['B04']?.href;
         if (cogHref && item.bbox) {
           const [west, south, east, north] = item.bbox;
+          console.log('[Data] Adding image overlay:', cogHref, 'bbox:', item.bbox);
           map.addSource(sourceId, {
             type: 'image',
             url: cogHref,
-            coordinates: [[west,north],[east,north],[east,south],[west,south]]
+            coordinates: [[west, north], [east, north], [east, south], [west, south]]
           });
-          map.addLayer({id: layerId, type: 'raster', source: sourceId});
+          map.addLayer({id: layerId, type: 'raster', source: sourceId, paint: {'raster-opacity': 0.85}}, firstSymbolId);
           loaded = true;
           console.log('[Data] Image overlay added:', layerId);
         }
       }
 
       if (!loaded) throw new Error('No tile URL or COG asset available');
+
+      // 3. Fly to data extent
+      if (item.bbox) {
+        const [west, south, east, north] = item.bbox;
+        map.fitBounds([[west, south], [east, north]], {padding: 40, maxZoom: 16});
+        console.log('[Data] fitBounds to:', item.bbox);
+      }
 
       setLoadedLayers(prev => [...prev, {id: layerId, itemId: item.id, visible: true}]);
 
@@ -599,6 +618,88 @@ const DataPanelContent = () => {
       setDownloading(null);
     }
   }, [selectedProvider, selectedCollection]);
+
+  // Handle local GeoTIFF upload
+  const handleLocalUpload = useCallback(async (file: File) => {
+    const map = (window as any).__PALMVIEW_MAP;
+    if (!map) {
+      setUploadStatus('❌ Map not ready');
+      return;
+    }
+    setUploadStatus(`⏳ Reading ${file.name}...`);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const tiff = await fromArrayBuffer(arrayBuffer);
+      const image = await tiff.getImage();
+
+      // Get bbox from GeoTIFF metadata
+      const bbox = image.getBoundingBox(); // [west, south, east, north]
+      const [west, south, east, north] = bbox;
+      console.log('[Upload] GeoTIFF bbox:', bbox, 'size:', image.getWidth(), 'x', image.getHeight());
+
+      // Read raster data and render to canvas
+      const width = image.getWidth();
+      const height = image.getHeight();
+      const samplesPerPixel = image.getSamplesPerPixel();
+      const rasters = await image.readRasters();
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      const imgData = ctx.createImageData(width, height);
+
+      if (samplesPerPixel >= 3) {
+        // RGB(A)
+        for (let i = 0; i < width * height; i++) {
+          imgData.data[i * 4] = (rasters[0] as any)[i];
+          imgData.data[i * 4 + 1] = (rasters[1] as any)[i];
+          imgData.data[i * 4 + 2] = (rasters[2] as any)[i];
+          imgData.data[i * 4 + 3] = samplesPerPixel >= 4 ? (rasters[3] as any)[i] : 255;
+        }
+      } else {
+        // Single band — grayscale, auto-stretch
+        const band = rasters[0] as any;
+        let min = Infinity, max = -Infinity;
+        for (let i = 0; i < band.length; i++) {
+          if (band[i] !== 0) { // skip nodata=0
+            if (band[i] < min) min = band[i];
+            if (band[i] > max) max = band[i];
+          }
+        }
+        const range = max - min || 1;
+        for (let i = 0; i < width * height; i++) {
+          const v = Math.round(((band[i] - min) / range) * 255);
+          imgData.data[i * 4] = v;
+          imgData.data[i * 4 + 1] = v;
+          imgData.data[i * 4 + 2] = v;
+          imgData.data[i * 4 + 3] = band[i] === 0 ? 0 : 255;
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+      const dataUrl = canvas.toDataURL('image/png');
+
+      const layerId = `local-${Date.now()}`;
+      const sourceId = `src-${layerId}`;
+      const firstSymbolId = map.getStyle()?.layers?.find((l: any) => l.type === 'symbol')?.id;
+
+      map.addSource(sourceId, {
+        type: 'image',
+        url: dataUrl,
+        coordinates: [[west, north], [east, north], [east, south], [west, south]]
+      });
+      map.addLayer({id: layerId, type: 'raster', source: sourceId, paint: {'raster-opacity': 0.85}}, firstSymbolId);
+      map.fitBounds([[west, south], [east, north]], {padding: 40, maxZoom: 16});
+
+      setLoadedLayers(prev => [...prev, {id: layerId, itemId: file.name, visible: true}]);
+      setUploadStatus(`✅ ${file.name} loaded`);
+      console.log('[Upload] Local GeoTIFF loaded:', file.name, 'layer:', layerId);
+    } catch (err: any) {
+      console.error('[Upload] Failed:', err);
+      setUploadStatus(`❌ ${err.message}`);
+    }
+  }, []);
 
   // Remove loaded layer from mapbox + state
   const handleRemoveLayer = useCallback((layerId: string) => {
@@ -620,15 +721,57 @@ const DataPanelContent = () => {
       {/* Source Toggle */}
       <SourceToggle>
         <SourceBtn active={source === 'stac'} onClick={() => setSource('stac')}>
-          STAC Satellite
+          🛰 STAC
         </SourceBtn>
         <SourceBtn active={source === 'gee'} onClick={() => setSource('gee')}>
-          🌍 Google Earth Engine
+          🌍 GEE
+        </SourceBtn>
+        <SourceBtn active={source === 'local'} onClick={() => setSource('local')}>
+          📁 Local
         </SourceBtn>
       </SourceToggle>
 
       {source === 'gee' ? (
         <GEEPanel />
+      ) : source === 'local' ? (
+        <>
+          <Section>
+            <SectionTitle>📁 Upload Local GeoTIFF</SectionTitle>
+            <EmptyMsg style={{padding: '8px 0'}}>
+              Upload a .tif / .tiff file to display on the map. Supports single-band (grayscale) and RGB GeoTIFFs with geographic coordinates.
+            </EmptyMsg>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".tif,.tiff,.geotiff"
+              style={{display: 'none'}}
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) handleLocalUpload(file);
+                e.target.value = '';
+              }}
+            />
+            <Btn primary style={{width: '100%'}} onClick={() => fileInputRef.current?.click()}>
+              📂 Choose GeoTIFF File
+            </Btn>
+            {uploadStatus && (
+              <div style={{marginTop: 8, fontSize: 11}}>{uploadStatus}</div>
+            )}
+          </Section>
+
+          {/* Loaded Layers (shared) */}
+          {loadedLayers.length > 0 && (
+            <Section>
+              <SectionTitle>🗺️ Loaded Layers ({loadedLayers.length})</SectionTitle>
+              {loadedLayers.map(layer => (
+                <Row key={layer.id} style={{justifyContent: 'space-between', padding: '4px 0'}}>
+                  <Muted style={{fontSize: 11}}>{layer.itemId}</Muted>
+                  <Btn small danger onClick={() => handleRemoveLayer(layer.id)}>✕</Btn>
+                </Row>
+              ))}
+            </Section>
+          )}
+        </>
       ) : (
         <>
           {/* Provider + Collection */}
