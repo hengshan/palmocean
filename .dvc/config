@@ -1,0 +1,5 @@
+[core]
+    remote = default
+['remote "default"']
+    url = s3://palmview-data/dvc
+    endpointurl = http://100.81.217.18:9000
