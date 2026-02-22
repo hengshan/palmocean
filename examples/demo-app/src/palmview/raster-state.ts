@@ -7,7 +7,7 @@
 
 // ── Types ────────────────────────────────────────────
 
-export type RasterSourceType = 'stac' | 'gee' | 'local';
+export type RasterSourceType = 'stac' | 'gee' | 'local' | 'vector';
 
 export interface RasterLayer {
   id: string;
@@ -47,10 +47,17 @@ export interface LoadedLayerInfo {
   sourceId: string;
   visible: boolean;
   sourceType: RasterSourceType;
+  opacity: number;
   /** Info needed to re-add layer after style change */
   tileUrl?: string;
   imageUrl?: string;
   bbox?: [number, number, number, number];
+  /** For vector layers: GeoJSON data for re-add after style change */
+  geojsonData?: any;
+  /** For vector layers: geometry type to determine layer style */
+  geomType?: string;
+  /** Additional sub-layer ids (e.g. outline layer for polygons) */
+  subLayerIds?: string[];
 }
 
 export interface DataTabState {
@@ -158,6 +165,75 @@ export function addLoadedLayer(layer: LoadedLayerInfo): void {
   _notify();
 }
 
+export function updateLoadedLayer(layerId: string, partial: Partial<LoadedLayerInfo>): void {
+  _state = {
+    ..._state,
+    dataTab: {
+      ..._state.dataTab,
+      loadedLayers: _state.dataTab.loadedLayers.map(l =>
+        l.id === layerId ? { ...l, ...partial } : l
+      ),
+    },
+  };
+  _notify();
+}
+
+export function toggleLayerVisibility(id: string): void {
+  const map = (window as any).__PALMVIEW_MAP;
+  if (!map) return;
+  const layer = _state.dataTab.loadedLayers.find(l => l.id === id);
+  if (!layer) return;
+  const newVisible = !layer.visible;
+  try {
+    if (map.getLayer(id)) {
+      map.setLayoutProperty(id, 'visibility', newVisible ? 'visible' : 'none');
+    }
+    // Also toggle sub-layers (e.g. polygon outline)
+    if (layer.subLayerIds) {
+      for (const subId of layer.subLayerIds) {
+        if (map.getLayer(subId)) {
+          map.setLayoutProperty(subId, 'visibility', newVisible ? 'visible' : 'none');
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[raster-state] toggleLayerVisibility failed:', e);
+  }
+  updateLoadedLayer(id, { visible: newVisible });
+}
+
+export function updateLayerOpacity(id: string, opacity: number): void {
+  const map = (window as any).__PALMVIEW_MAP;
+  if (!map) return;
+  const layer = _state.dataTab.loadedLayers.find(l => l.id === id);
+  if (!layer) return;
+  const clamped = Math.max(0, Math.min(1, opacity));
+  try {
+    if (['stac', 'gee', 'local'].includes(layer.sourceType)) {
+      if (map.getLayer(id)) map.setPaintProperty(id, 'raster-opacity', clamped);
+    } else if (layer.sourceType === 'vector') {
+      if (map.getLayer(id)) {
+        const layerDef = map.getLayer(id);
+        const type = layerDef?.type;
+        if (type === 'fill') map.setPaintProperty(id, 'fill-opacity', clamped);
+        else if (type === 'line') map.setPaintProperty(id, 'line-opacity', clamped);
+        else if (type === 'circle') map.setPaintProperty(id, 'circle-opacity', clamped);
+      }
+      if (layer.subLayerIds) {
+        for (const subId of layer.subLayerIds) {
+          if (map.getLayer(subId)) {
+            const subDef = map.getLayer(subId);
+            if (subDef?.type === 'line') map.setPaintProperty(subId, 'line-opacity', clamped);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[raster-state] updateLayerOpacity failed:', e);
+  }
+  updateLoadedLayer(id, { opacity: clamped });
+}
+
 export function removeLoadedLayer(layerId: string): void {
   _state = {
     ..._state,
@@ -188,8 +264,24 @@ export function reAddAllLayers(): void {
       try {
         if (map.getSource(layer.sourceId)) continue; // already exists
 
-        if (layer.tileUrl) {
+        if (layer.sourceType === 'vector' && layer.geojsonData) {
+          map.addSource(layer.sourceId, { type: 'geojson', data: layer.geojsonData });
+          const geomType = layer.geomType || '';
+          if (geomType.includes('Polygon')) {
+            map.addLayer({ id: layer.id, type: 'fill', source: layer.sourceId, paint: { 'fill-color': '#1FBF6E', 'fill-opacity': layer.opacity ?? 0.4 } }, firstSymbolId);
+            const outlineId = `${layer.id}-outline`;
+            map.addLayer({ id: outlineId, type: 'line', source: layer.sourceId, paint: { 'line-color': '#1FBF6E', 'line-width': 1.5 } }, firstSymbolId);
+          } else if (geomType.includes('Line')) {
+            map.addLayer({ id: layer.id, type: 'line', source: layer.sourceId, paint: { 'line-color': '#1FBF6E', 'line-width': 2, 'line-opacity': layer.opacity ?? 0.85 } }, firstSymbolId);
+          } else {
+            map.addLayer({ id: layer.id, type: 'circle', source: layer.sourceId, paint: { 'circle-radius': 5, 'circle-color': '#1FBF6E', 'circle-opacity': layer.opacity ?? 0.85 } }, firstSymbolId);
+          }
+        } else if (layer.tileUrl) {
           map.addSource(layer.sourceId, { type: 'raster', tiles: [layer.tileUrl], tileSize: 256 });
+          map.addLayer(
+            { id: layer.id, type: 'raster', source: layer.sourceId, paint: { 'raster-opacity': layer.opacity ?? 0.85 } },
+            firstSymbolId
+          );
         } else if (layer.imageUrl && layer.bbox) {
           const [west, south, east, north] = layer.bbox;
           map.addSource(layer.sourceId, {
@@ -197,15 +289,14 @@ export function reAddAllLayers(): void {
             url: layer.imageUrl,
             coordinates: [[west, north], [east, north], [east, south], [west, south]],
           });
+          map.addLayer(
+            { id: layer.id, type: 'raster', source: layer.sourceId, paint: { 'raster-opacity': layer.opacity ?? 0.85 } },
+            firstSymbolId
+          );
         } else {
           console.warn('[raster-state] Cannot re-add layer, no URL:', layer.id);
           continue;
         }
-
-        map.addLayer(
-          { id: layer.id, type: 'raster', source: layer.sourceId, paint: { 'raster-opacity': 0.85 } },
-          firstSymbolId
-        );
         console.log('[raster-state] Re-added layer:', layer.id);
       } catch (e) {
         console.warn('[raster-state] Failed to re-add layer:', layer.id, e);

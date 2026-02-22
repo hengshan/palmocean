@@ -10,6 +10,9 @@ import {
   updateDataTab,
   addLoadedLayer,
   removeLoadedLayer,
+  updateLoadedLayer,
+  toggleLayerVisibility,
+  updateLayerOpacity,
   attachStyleListener,
   type STACSearchItemPersist,
   type LoadedLayerInfo,
@@ -209,6 +212,53 @@ const Slider = styled.input`
   accent-color: ${(p: any) => p.theme?.activeColor || '#1FBF6E'};
 `;
 
+const DropZone = styled.div<{$active?: boolean}>`
+  border: 2px dashed ${(p: any) => p.$active ? p.theme?.activeColor || '#1FBF6E' : p.theme?.borderColor || 'rgba(255,255,255,0.15)'};
+  border-radius: 4px;
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: ${(p: any) => p.$active ? 'rgba(31,191,110,0.08)' : 'transparent'};
+  &:hover { border-color: ${(p: any) => p.theme?.activeColor || '#1FBF6E'}; background: rgba(31,191,110,0.04); }
+`;
+
+const OpacitySlider = styled.input`
+  width: 60px;
+  accent-color: ${(p: any) => p.theme?.activeColor || '#1FBF6E'};
+  height: 3px;
+`;
+
+const LayerItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  &:last-child { border-bottom: none; }
+`;
+
+const LayerName = styled.span`
+  flex: 1;
+  font-size: 11px;
+  color: ${(p: any) => p.theme?.textColor || '#A0A7B4'};
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+`;
+
+const IconBtn = styled.button<{$dim?: boolean}>`
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  opacity: ${(p: any) => p.$dim ? 0.35 : 0.8};
+  transition: opacity 0.15s;
+  &:hover { opacity: 1; }
+`;
+
 const EmptyMsg = styled.p`
   color: ${(p: any) => p.theme?.subtextColor || '#6A7485'};
   font-size: 11px;
@@ -363,7 +413,7 @@ const GEEPanel = () => {
       const ok = addRasterToMap(map, layerId, sourceId, { imageUrl: item.thumbnail_url, bbox });
       if (ok) {
         map.fitBounds([[w, s], [e, n]], { padding: 40, maxZoom: 16 });
-        addLoadedLayer({ id: layerId, itemId: item.id, sourceId, visible: true, sourceType: 'gee', imageUrl: item.thumbnail_url, bbox });
+        addLoadedLayer({ id: layerId, itemId: item.id, sourceId, visible: true, sourceType: 'gee', opacity: 0.85, imageUrl: item.thumbnail_url, bbox });
         console.log('[GEE] Thumbnail overlay added:', layerId);
       }
     } catch (err: any) {
@@ -460,6 +510,8 @@ const DataPanelContent = () => {
   const [collections, setCollections] = useState<STACCollection[]>([]);
   const [searching, setSearching] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
   // Attach style listener on mount
   useEffect(() => { attachStyleListener(); }, []);
@@ -574,7 +626,7 @@ const DataPanelContent = () => {
         console.log('[Data] fitBounds to:', item.bbox);
       }
 
-      addLoadedLayer({ id: layerId, itemId: item.id, sourceId, visible: true, sourceType: 'stac', tileUrl, imageUrl, bbox });
+      addLoadedLayer({ id: layerId, itemId: item.id, sourceId, visible: true, sourceType: 'stac', opacity: 0.85, tileUrl, imageUrl, bbox });
     } catch (err: any) {
       console.error('[Data] Load to map failed:', err);
     } finally {
@@ -641,7 +693,7 @@ const DataPanelContent = () => {
       const ok = addRasterToMap(map, layerId, sourceId, { imageUrl: dataUrl, bbox });
       if (ok) {
         map.fitBounds([[west, south], [east, north]], { padding: 50, maxZoom: 16 });
-        addLoadedLayer({ id: layerId, itemId: file.name, sourceId, visible: true, sourceType: 'local', imageUrl: dataUrl, bbox });
+        addLoadedLayer({ id: layerId, itemId: file.name, sourceId, visible: true, sourceType: 'local', opacity: 0.85, imageUrl: dataUrl, bbox });
         updateDataTab({ uploadStatus: `✅ ${file.name} loaded` });
         console.log('[Upload] Local GeoTIFF loaded:', file.name);
       } else {
@@ -653,11 +705,114 @@ const DataPanelContent = () => {
     }
   }, []);
 
+  // Local GeoJSON/CSV upload
+  const handleLocalUploadVector = useCallback(async (file: File) => {
+    const map = getMap();
+    if (!map) {
+      updateDataTab({ uploadStatus: '❌ Map not ready' });
+      return;
+    }
+    updateDataTab({ uploadStatus: `⏳ Reading ${file.name}...` });
+    try {
+      const text = await file.text();
+      let geojson: any;
+
+      if (file.name.endsWith('.csv')) {
+        // Simple CSV to GeoJSON: expects lat/lng or latitude/longitude columns
+        const lines = text.trim().split('\n');
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        const latIdx = headers.findIndex(h => ['lat', 'latitude', 'y'].includes(h));
+        const lngIdx = headers.findIndex(h => ['lng', 'lon', 'longitude', 'x'].includes(h));
+        if (latIdx === -1 || lngIdx === -1) throw new Error('CSV must have lat/latitude and lng/longitude columns');
+        const rawHeaders = lines[0].split(',').map(h => h.trim());
+        const features = [];
+        for (let i = 1; i < lines.length; i++) {
+          const vals = lines[i].split(',').map(v => v.trim());
+          if (!vals[latIdx] || !vals[lngIdx]) continue;
+          const props: Record<string, string> = {};
+          rawHeaders.forEach((h, idx) => { if (idx !== latIdx && idx !== lngIdx) props[h] = vals[idx]; });
+          features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [parseFloat(vals[lngIdx]), parseFloat(vals[latIdx])] }, properties: props });
+        }
+        geojson = { type: 'FeatureCollection', features };
+      } else {
+        geojson = JSON.parse(text);
+      }
+
+      const layerId = `vector-${Date.now()}`;
+      const sourceId = `src-${layerId}`;
+      const subLayerIds: string[] = [];
+
+      map.addSource(sourceId, { type: 'geojson', data: geojson });
+
+      const geomType = geojson.features?.[0]?.geometry?.type || 'Point';
+      const firstSymbolId = getFirstSymbolId(map);
+
+      if (geomType.includes('Polygon')) {
+        map.addLayer({ id: layerId, type: 'fill', source: sourceId, paint: { 'fill-color': '#1FBF6E', 'fill-opacity': 0.4 } }, firstSymbolId);
+        const outlineId = `${layerId}-outline`;
+        map.addLayer({ id: outlineId, type: 'line', source: sourceId, paint: { 'line-color': '#1FBF6E', 'line-width': 1.5 } }, firstSymbolId);
+        subLayerIds.push(outlineId);
+      } else if (geomType.includes('Line')) {
+        map.addLayer({ id: layerId, type: 'line', source: sourceId, paint: { 'line-color': '#1FBF6E', 'line-width': 2 } }, firstSymbolId);
+      } else {
+        map.addLayer({ id: layerId, type: 'circle', source: sourceId, paint: { 'circle-radius': 5, 'circle-color': '#1FBF6E' } }, firstSymbolId);
+      }
+
+      // Fit bounds
+      if (geojson.features?.length) {
+        let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+        const processCoord = (c: number[]) => { minLng = Math.min(minLng, c[0]); minLat = Math.min(minLat, c[1]); maxLng = Math.max(maxLng, c[0]); maxLat = Math.max(maxLat, c[1]); };
+        const processCoords = (coords: any, type: string) => {
+          if (type === 'Point') processCoord(coords);
+          else if (type === 'MultiPoint' || type === 'LineString') coords.forEach(processCoord);
+          else if (type === 'MultiLineString' || type === 'Polygon') coords.forEach((ring: any) => ring.forEach(processCoord));
+          else if (type === 'MultiPolygon') coords.forEach((poly: any) => poly.forEach((ring: any) => ring.forEach(processCoord)));
+        };
+        geojson.features.forEach((f: any) => { if (f.geometry) processCoords(f.geometry.coordinates, f.geometry.type); });
+        if (minLng !== Infinity) map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 50, maxZoom: 16 });
+      }
+
+      addLoadedLayer({ id: layerId, itemId: file.name, sourceId, visible: true, sourceType: 'vector', opacity: 0.85, geojsonData: geojson, geomType, subLayerIds });
+      updateDataTab({ uploadStatus: `✅ ${file.name} loaded` });
+    } catch (err: any) {
+      console.error('[Upload] Vector failed:', err);
+      updateDataTab({ uploadStatus: `❌ ${err.message}` });
+    }
+  }, []);
+
+  // Multi-file upload handler
+  const handleMultiUpload = useCallback(async (files: FileList | File[]) => {
+    const fileArr = Array.from(files);
+    if (fileArr.length === 0) return;
+    for (let i = 0; i < fileArr.length; i++) {
+      const file = fileArr[i];
+      if (fileArr.length > 1) setUploadProgress(`Loading ${i + 1}/${fileArr.length}...`);
+      const ext = file.name.toLowerCase();
+      if (ext.endsWith('.geojson') || ext.endsWith('.json') || ext.endsWith('.csv')) {
+        await handleLocalUploadVector(file);
+      } else {
+        await handleLocalUpload(file);
+      }
+    }
+    setUploadProgress(null);
+  }, [handleLocalUpload, handleLocalUploadVector]);
+
+  // Drag & drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); }, []);
+  const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); }, []);
+  const handleDrop = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); if (e.dataTransfer.files.length) handleMultiUpload(e.dataTransfer.files); }, [handleMultiUpload]);
+
   // Remove layer
   const handleRemoveLayer = useCallback((layer: LoadedLayerInfo) => {
     const map = (window as any).__PALMVIEW_MAP;
     if (map) {
       try {
+        // Remove sub-layers first (e.g. polygon outlines)
+        if (layer.subLayerIds) {
+          for (const subId of layer.subLayerIds) {
+            if (map.getLayer(subId)) map.removeLayer(subId);
+          }
+        }
         if (map.getLayer(layer.id)) map.removeLayer(layer.id);
         if (map.getSource(layer.sourceId)) map.removeSource(layer.sourceId);
       } catch (e) {
@@ -667,19 +822,52 @@ const DataPanelContent = () => {
     removeLoadedLayer(layer.id);
   }, []);
 
-  // ─── Loaded Layers Section (shared across all sources) ───
-  const LoadedLayersSection = dt.loadedLayers.length > 0 ? (
+  // ─── Loaded Layers Section (grouped) ───
+  const vectorLayers = dt.loadedLayers.filter(l => l.sourceType === 'vector');
+  const rasterLayers = dt.loadedLayers.filter(l => ['stac', 'gee', 'local'].includes(l.sourceType));
+
+  const renderLayerItem = (layer: LoadedLayerInfo) => (
+    <LayerItem key={layer.id}>
+      <IconBtn $dim={!layer.visible} onClick={() => toggleLayerVisibility(layer.id)} title={layer.visible ? 'Hide' : 'Show'}>
+        {layer.visible ? '👁️' : '👁️‍🗨️'}
+      </IconBtn>
+      <LayerName title={layer.itemId}>{layer.itemId}</LayerName>
+      <Badge $color={
+        layer.sourceType === 'stac' ? '#3b82f6' :
+        layer.sourceType === 'gee' ? '#22c55e' :
+        layer.sourceType === 'vector' ? '#a855f7' :
+        'rgba(255,255,255,0.15)'
+      }>{layer.sourceType.toUpperCase()}</Badge>
+      <OpacitySlider
+        type="range" min={0} max={100}
+        value={Math.round((layer.opacity ?? 0.85) * 100)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateLayerOpacity(layer.id, Number(e.target.value) / 100)}
+        title={`Opacity: ${Math.round((layer.opacity ?? 0.85) * 100)}%`}
+      />
+      <IconBtn onClick={() => handleRemoveLayer(layer)} title="Remove">✕</IconBtn>
+    </LayerItem>
+  );
+
+  const LoadedLayersSection = (vectorLayers.length > 0 || rasterLayers.length > 0) ? (
     <Section>
       <SectionTitle>🗺️ Loaded Layers ({dt.loadedLayers.length})</SectionTitle>
-      {dt.loadedLayers.map(layer => (
-        <Row key={layer.id} style={{justifyContent: 'space-between', padding: '4px 0'}}>
-          <Muted style={{fontSize: 11}}>
-            {layer.sourceType === 'gee' ? '🌍' : layer.sourceType === 'local' ? '📁' : '🛰'}{' '}
-            {layer.itemId}
-          </Muted>
-          <Btn $small $danger onClick={() => handleRemoveLayer(layer)}>✕</Btn>
-        </Row>
-      ))}
+      {vectorLayers.length > 0 && (
+        <>
+          <Muted style={{fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginTop: 4, marginBottom: 2}}>🗺️ Vector Layers</Muted>
+          {vectorLayers.map(renderLayerItem)}
+        </>
+      )}
+      {rasterLayers.length > 0 && (
+        <>
+          <Muted style={{fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginTop: vectorLayers.length > 0 ? 8 : 4, marginBottom: 2}}>🛰️ Raster Layers</Muted>
+          {rasterLayers.map(renderLayerItem)}
+        </>
+      )}
+      <Muted style={{fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginTop: 8, marginBottom: 2}}>🌐 Basemap</Muted>
+      <LayerItem>
+        <LayerName>Default</LayerName>
+        <Badge>BASE</Badge>
+      </LayerItem>
     </Section>
   ) : null;
 
@@ -703,25 +891,35 @@ const DataPanelContent = () => {
       ) : dt.source === 'local' ? (
         <>
           <Section>
-            <SectionTitle>📁 Upload Local GeoTIFF</SectionTitle>
-            <EmptyMsg style={{padding: '8px 0'}}>
-              Upload a .tif / .tiff file to display on the map.
-            </EmptyMsg>
+            <SectionTitle>📁 Upload Local Files</SectionTitle>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".tif,.tiff,.geotiff"
+              accept=".tif,.tiff,.geotiff,.geojson,.json,.csv"
+              multiple
               style={{display: 'none'}}
               onChange={e => {
-                const file = e.target.files?.[0];
-                if (file) handleLocalUpload(file);
+                if (e.target.files?.length) handleMultiUpload(e.target.files);
                 e.target.value = '';
               }}
             />
-            <Btn $primary style={{width: '100%'}} onClick={() => fileInputRef.current?.click()}>
-              📂 Choose GeoTIFF File
-            </Btn>
-            {dt.uploadStatus && <div style={{marginTop: 8, fontSize: 11}}>{dt.uploadStatus}</div>}
+            <DropZone
+              $active={dragActive}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <div style={{fontSize: 24, marginBottom: 6}}>📂</div>
+              <div style={{fontSize: 11, color: '#D3D8E0', fontWeight: 500}}>
+                {dragActive ? 'Drop files here' : 'Click or drag files here'}
+              </div>
+              <Muted style={{fontSize: 10, marginTop: 4}}>
+                GeoTIFF · GeoJSON · CSV
+              </Muted>
+            </DropZone>
+            {uploadProgress && <div style={{marginTop: 8, fontSize: 11, color: '#1FBF6E'}}>{uploadProgress}</div>}
+            {dt.uploadStatus && <div style={{marginTop: 4, fontSize: 11}}>{dt.uploadStatus}</div>}
           </Section>
           {LoadedLayersSection}
         </>
