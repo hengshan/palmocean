@@ -107,6 +107,7 @@
     "@hubble.gl/react": "1.4.0",
     "@kepler.gl/components": "3.2.5",
     "@loaders.gl/polyfills": "^4.3.2",
+    "@mapbox/tiny-sdf": "^2.0.5",
     "@types/mapbox__geo-viewport": "^0.4.1",
     "html-webpack-plugin": "^4.3.0",
     "monaco-editor": "^0.52.0",

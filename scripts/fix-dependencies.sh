@@ -16,3 +16,19 @@ fi
 
 # fix ERR_REQUIRE_ESM in yarn cover
 yarn babel node_modules/maplibregl-mapbox-request-transformer/src/index.js | tail -n +2 > node_modules/maplibregl-mapbox-request-transformer/src/index.cjs
+
+# Node 22 + GCC: ANGLE (used by gl@6.x) is missing #include <cstdint> which defines uintptr_t.
+# Without this patch, gl fails to compile with "error: 'uintptr_t' does not name a type".
+# See: https://github.com/stackgl/headless-gl/issues/XXX
+ANGLE_UTILS="node_modules/gl/angle/src/common/angleutils.h"
+if [[ -f "$ANGLE_UTILS" ]] && ! grep -q '#include <cstdint>' "$ANGLE_UTILS"; then
+  echo "Patching $ANGLE_UTILS: adding #include <cstdint> for Node 22 / GCC 13+ compatibility"
+  sed -i 's/#include <cstddef>/#include <cstddef>\n#include <cstdint>/' "$ANGLE_UTILS"
+fi
+
+# Rebuild gl native addon if webgl.node is missing (Node 22 compatibility)
+GL_BINDING="node_modules/gl/build/Release/webgl.node"
+if [[ ! -f "$GL_BINDING" ]]; then
+  echo "Rebuilding gl native addon for Node 22..."
+  (cd node_modules/gl && node node_modules/.bin/node-gyp rebuild 2>&1 | tail -5)
+fi

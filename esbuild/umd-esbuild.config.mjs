@@ -8,7 +8,7 @@ import {umdWrapper} from 'esbuild-plugin-umd-wrapper';
 import process from 'node:process';
 import {spawn} from 'node:child_process';
 import {join} from 'node:path';
-import KeplerPackage from '../package.json' assert {type: 'json'};
+import KeplerPackage from '../package.json' with {type: 'json'};
 
 const LIB_DIR = './';
 const NODE_MODULES_DIR = join(LIB_DIR, 'node_modules');
