@@ -26,12 +26,11 @@ const CustomLoadDataModalFactory = (...deps) => {
     }
   };
 
-  // add more loading methods
+  // add more loading methods (no cloud storage - PalmView doesn't use Dropbox/Carto/Foursquare)
   const loadingMethods = [
     defaultLoadingMethods.find(lm => lm.id === 'upload'),
     defaultLoadingMethods.find(lm => lm.id === 'tileset'),
     additionalMethods.remote,
-    defaultLoadingMethods.find(lm => lm.id === 'storage'),
     additionalMethods.sample
   ];
 

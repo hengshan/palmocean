@@ -40,16 +40,10 @@ export const LOADING_SAMPLE_ERROR_MESSAGE = 'Not able to load sample';
 export const CORS_LINK = 'https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS';
 
 export const DEFAULT_FEATURE_FLAGS = {
-  cloudStorage: true
+  cloudStorage: false
 };
 
 export const CLOUD_PROVIDERS_CONFIGURATION = {
   MAPBOX_TOKEN: process.env.MapboxAccessToken, // eslint-disable-line
-  DROPBOX_CLIENT_ID: process.env.DropboxClientId, // eslint-disable-line
-  EXPORT_MAPBOX_TOKEN: process.env.MapboxExportToken, // eslint-disable-line
-  CARTO_CLIENT_ID: process.env.CartoClientId, // eslint-disable-line
-  FOURSQUARE_CLIENT_ID: process.env.FoursquareClientId, // eslint-disable-line
-  FOURSQUARE_DOMAIN: process.env.FoursquareDomain, // eslint-disable-line
-  FOURSQUARE_API_URL: process.env.FoursquareAPIURL, // eslint-disable-line
-  FOURSQUARE_USER_MAPS_URL: process.env.FoursquareUserMapsURL // eslint-disable-line
+  EXPORT_MAPBOX_TOKEN: process.env.MapboxExportToken // eslint-disable-line
 };

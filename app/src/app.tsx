@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright contributors to the kepler.gl project
 
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import AutoSizer from 'react-virtualized/dist/commonjs/AutoSizer';
 import styled, {ThemeProvider, StyleSheetManager} from 'styled-components';
 import Window from 'global/window';
 import {connect, useDispatch} from 'react-redux';
 import cloneDeep from 'lodash/cloneDeep';
-import isEqual from 'lodash/isEqual';
 import {useSelector} from 'react-redux';
 import isPropValid from '@emotion/is-prop-valid';
 import {WebMercatorViewport} from '@deck.gl/core';
@@ -34,19 +33,15 @@ import {messages} from './constants/localization';
 
 import {
   loadRemoteMap,
-  loadSampleConfigurations,
-  onExportFileSuccess,
-  onLoadCloudMapSuccess
+  loadSampleConfigurations
 } from './actions';
 
 import {
-  loadCloudMap,
   addDataToMap,
   replaceDataInMap,
   toggleMapControl,
   toggleModal
 } from '@kepler.gl/actions';
-import {CLOUD_PROVIDERS} from './cloud-providers';
 import {Panel, PanelGroup, PanelResizeHandle} from 'react-resizable-panels';
 
 import PalmViewCustomPanelsFactory from './factories/custom-panels';
@@ -218,29 +213,7 @@ const App = props => {
     };
   }, [editorFeatures]);
 
-  const prevQueryRef = useRef<number>(null);
-
   useEffect(() => {
-    // if we pass an id as part of the url
-    // we try to fetch along map configurations
-    const cloudProvider = CLOUD_PROVIDERS.find(c => c.name === provider);
-    if (cloudProvider) {
-      // Prevent constant reloading after change of the location
-      if (isEqual(prevQueryRef.current, {provider, id, query})) {
-        return;
-      }
-
-      dispatch(
-        loadCloudMap({
-          loadParams: query,
-          provider: cloudProvider,
-          onSuccess: onLoadCloudMapSuccess
-        })
-      );
-      prevQueryRef.current = {provider, id, query};
-      return;
-    }
-
     // Load sample using its id
     if (id) {
       dispatch(loadSampleConfigurations(id));
@@ -727,10 +700,8 @@ const App = props => {
                               getState={keplerGlGetState}
                               width={width}
                               height={height}
-                              cloudProviders={CLOUD_PROVIDERS}
+                              cloudProviders={[]}
                               localeMessages={messages}
-                              onExportToCloudSuccess={onExportFileSuccess}
-                              onLoadCloudMapSuccess={onLoadCloudMapSuccess}
                               featureFlags={DEFAULT_FEATURE_FLAGS}
                               onViewStateChange={onViewStateChange}
                               getMapboxRef={handleGetMapboxRef}

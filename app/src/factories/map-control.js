@@ -12,7 +12,7 @@ import {
 } from '@kepler.gl/components';
 import {AiAssistantControlFactory} from '@kepler.gl/ai-assistant';
 
-import {BannerMapPanel, SampleMapPanel} from '../components/map-control/map-control';
+import {SampleMapPanel} from '../components/map-control/map-control';
 import SqlPanelControlFactory from '../components/map-control/sql-panel-control';
 // AoiControl removed — drawing tools merged into Kepler's Draw on Map panel
 // import AoiControl from './aoi-control';

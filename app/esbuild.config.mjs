@@ -53,16 +53,10 @@ const getThirdPartyLibraryAliases = useKeplerNodeModules => {
   };
 };
 
-// Env variables required for demo app
+// Env variables required for PalmView
 const requiredEnvVariables = [
   'MapboxAccessToken',
-  'DropboxClientId',
-  'MapboxExportToken',
-  'CartoClientId',
-  'FoursquareClientId',
-  'FoursquareDomain',
-  'FoursquareAPIURL',
-  'FoursquareUserMapsURL'
+  'MapboxExportToken'
 ];
 
 /**
@@ -97,13 +91,7 @@ const config = {
     NODE_ENV,
     // Define process.env variables for browser environment
     'process.env.MapboxAccessToken': JSON.stringify(process.env.MapboxAccessToken || ''),
-    'process.env.DropboxClientId': JSON.stringify(process.env.DropboxClientId || ''),
     'process.env.MapboxExportToken': JSON.stringify(process.env.MapboxExportToken || ''),
-    'process.env.CartoClientId': JSON.stringify(process.env.CartoClientId || ''),
-    'process.env.FoursquareClientId': JSON.stringify(process.env.FoursquareClientId || ''),
-    'process.env.FoursquareDomain': JSON.stringify(process.env.FoursquareDomain || ''),
-    'process.env.FoursquareAPIURL': JSON.stringify(process.env.FoursquareAPIURL || ''),
-    'process.env.FoursquareUserMapsURL': JSON.stringify(process.env.FoursquareUserMapsURL || ''),
     'process.env.NODE_ENV': NODE_ENV
   },
   plugins: [
