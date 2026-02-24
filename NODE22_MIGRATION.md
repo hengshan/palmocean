@@ -15,7 +15,7 @@ This document tracks all changes made to make PalmView (Kepler.gl fork) compatib
 
 **Files fixed:**
 - `esbuild/umd-esbuild.config.mjs` — `import KeplerPackage from '../package.json' with {type: 'json'}`
-- `examples/demo-app/esbuild.config.mjs` — `import KeplerPackage from '../../package.json' with {type: 'json'}`
+- `app/esbuild.config.mjs` — `import KeplerPackage from '../package.json' with {type: 'json'}`
 - `examples/replace-component/esbuild.config.mjs` — `import KeplerPackage from '../../package.json' with {type: 'json'}`
 - `website/esbuild.config.mjs` — `import WebsitePackage from '../package.json' with {type: 'json'}`
 

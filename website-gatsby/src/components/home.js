@@ -16,8 +16,8 @@ import Features from './features';
 import Footer from './footer';
 import Section from './common/section';
 import Header from './header';
-import Banner from '../../../examples/demo-app/src/components/banner';
-import Announcement from '../../../examples/demo-app/src/components/announcement';
+import Banner from '../../../app/src/components/banner';
+import Announcement from '../../../app/src/components/announcement';
 
 const BannerKey = 'kgHideBanner-iiba';
 const BannerHeight = 30;

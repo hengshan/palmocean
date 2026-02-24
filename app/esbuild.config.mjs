@@ -9,13 +9,13 @@ import process from 'node:process';
 import fs from 'node:fs';
 import {spawn} from 'node:child_process';
 import {join} from 'node:path';
-import KeplerPackage from '../../package.json' with {type: 'json'};
+import KeplerPackage from '../package.json' with {type: 'json'};
 
 const args = process.argv;
 
 const BASE_NODE_MODULES_DIR = './node_modules';
 
-const LIB_DIR = '../../';
+const LIB_DIR = '../';
 const NODE_MODULES_DIR = join(LIB_DIR, 'node_modules');
 const SRC_DIR = join(LIB_DIR, 'src');
 
@@ -110,7 +110,7 @@ const config = {
     dotenvRun({
       verbose: true,
       environment: NODE_ENV,
-      root: '../../.env'
+      root: '../.env'
     }),
     // automatically injected kepler.gl package version into the bundle
     replace({

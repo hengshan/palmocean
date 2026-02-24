@@ -46,9 +46,9 @@ src/
 └── @kepler.gl/styles (样式系统)
 ```
 
-### 1.3 启动流程（从 examples/demo-app 到渲染）
+### 1.3 启动流程（从 app/ 到渲染）
 
-1. **入口文件**：`examples/demo-app/src/main.js`
+1. **入口文件**：`app/src/main.js`
 ```javascript
 // 1. 创建 Redux Store
 import store from './store';
@@ -65,7 +65,7 @@ const Root = () => (
 );
 ```
 
-2. **Store 配置**：`examples/demo-app/src/store.js`
+2. **Store 配置**：`app/src/store.js`
 ```javascript
 const reducers = combineReducers({
   keplerGl: keplerGlReducer,  // 核心 kepler.gl reducer
@@ -73,7 +73,7 @@ const reducers = combineReducers({
 });
 ```
 
-3. **核心 App 组件**：`examples/demo-app/src/app.tsx`
+3. **核心 App 组件**：`app/src/app.tsx`
 ```javascript
 // 关键组件注入
 const KeplerGl = require('@kepler.gl/components').injectComponents([
@@ -413,7 +413,7 @@ const DEFAULT_COMPOSITE_MODE = new CompositeMode([
    - 修改 `_setMapRef` 方法，集成 Geoman
    - 调整事件处理逻辑
 
-3. **`examples/demo-app/src/app.tsx`**
+3. **`app/src/app.tsx`**
    - 在 `handleGetMapboxRef` 中初始化 Geoman
 
 #### 示例代码：
@@ -641,7 +641,7 @@ export function injectComponents(factories = []) {
 ### 5.2 MapDrawPanelFactory 详细分析
 
 ```javascript
-// examples/demo-app/src/factories/map-control.js
+// app/src/factories/map-control.js
 export function replaceMapControl() {
   return [MapControlFactory, CustomMapControlFactory];
 }
@@ -729,7 +729,7 @@ const MapControl = ({actionComponents = [], ...props}) => {
 
 **动作组件示例**：
 ```javascript
-// examples/demo-app/src/factories/aoi-control.tsx
+// app/src/factories/aoi-control.tsx
 function AoiControlFactory() {
   const AoiControl = (props) => {
     const {mapControls, onToggleMapControl} = props;
@@ -1018,7 +1018,7 @@ export function isDrawingActive(editorMenuActive, mode) {
 ### 7.4 getMapboxRef / getMapRef 获取方式
 
 ```javascript
-// examples/demo-app/src/app.tsx
+// app/src/app.tsx
 const handleGetMapboxRef = useCallback((mapbox, index) => {
   if (mapbox) {
     const map = mapbox.getMap();  // 获取原生 MapLibre 实例
@@ -1063,7 +1063,7 @@ _setMapRef = mapRef => {
 | `src/index.js` | 主入口，导出所有 API | ⭐⭐⭐⭐⭐ |
 | `src/components/src/kepler-gl.tsx` | 主组件，应用入口 | ⭐⭐⭐⭐⭐ |
 | `src/components/src/map-container.tsx` | 地图容器，双层架构核心 | ⭐⭐⭐⭐⭐ |
-| `examples/demo-app/src/app.tsx` | 示例应用，集成参考 | ⭐⭐⭐⭐ |
+| `app/src/app.tsx` | 示例应用，集成参考 | ⭐⭐⭐⭐ |
 
 ### 8.2 双层架构相关
 
@@ -1098,7 +1098,7 @@ _setMapRef = mapRef => {
 |---------|------|--------|
 | `src/components/src/container.js` | 组件容器和依赖注入 | ⭐⭐⭐⭐⭐ |
 | `src/components/src/factories/` | 组件工厂目录 | ⭐⭐⭐⭐ |
-| `examples/demo-app/src/factories/` | 自定义工厂实现 | ⭐⭐⭐⭐ |
+| `app/src/factories/` | 自定义工厂实现 | ⭐⭐⭐⭐ |
 | `src/components/src/map/map-control.tsx` | 地图控件容器 | ⭐⭐⭐⭐ |
 
 ### 8.6 数据处理
@@ -1116,7 +1116,7 @@ _setMapRef = mapRef => {
 |---------|------|--------|
 | `src/styles/src/` | 样式系统 | ⭐⭐⭐ |
 | `src/constants/src/` | 常量定义 | ⭐⭐⭐⭐ |
-| `examples/demo-app/src/styles/palmview-theme.ts` | 自定义主题 | ⭐⭐⭐ |
+| `app/src/styles/palmview-theme.ts` | 自定义主题 | ⭐⭐⭐ |
 
 ### 8.8 关键配置文件
 
@@ -1148,7 +1148,7 @@ _setMapRef = mapRef => {
 
 对于新加入的开发者：
 
-1. **从示例开始**：仔细研究 `examples/demo-app`
+1. **从示例开始**：仔细研究 `app`
 2. **理解状态流**：掌握 Redux 的 Action → Reducer → Component 流程
 3. **熟悉工厂模式**：了解组件注入和替换机制
 4. **调试双层架构**：使用浏览器开发者工具查看 Canvas 层次

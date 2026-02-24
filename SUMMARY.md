@@ -69,7 +69,7 @@
   * [Jupyter Notebook](docs/keplergl-jupyter/README.md)
 * [Examples](examples/README.md)
   * [Node/Express](examples/node-app/README.md)
-  * [Demo App](examples/demo-app/README.md)
+  * [Demo App](app/README.md)
   * [Open modal](examples/replace-component/README.md)
   * [Open modal](examples/open-modal/README.md)
   * [UMD client](examples/umd-client/README.md)

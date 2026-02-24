@@ -8,7 +8,7 @@ import thunk from 'redux-thunk';
 
 import {browserHistory} from 'react-router';
 import appReducer from './app';
-import demoReducer from '../../../examples/demo-app/src/reducers';
+import demoReducer from '../../../app/src/reducers';
 import analyticsMiddleware from './analytics';
 
 const initialState = {};

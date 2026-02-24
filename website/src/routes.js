@@ -8,10 +8,10 @@ import Window from 'global/window';
 import store from './reducers';
 import Home from './components/home';
 import App from './components/app';
-import Demo from '../../examples/demo-app/src/app';
+import Demo from '../../app/src/app';
 import Policy from './components/policy';
 
-import {buildAppRoutes} from '../../examples/demo-app/src/utils/routes';
+import {buildAppRoutes} from '../../app/src/utils/routes';
 
 const appRoute = buildAppRoutes(Demo);
 
