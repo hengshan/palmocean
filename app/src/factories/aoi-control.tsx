@@ -13,6 +13,17 @@ import classnames from 'classnames';
 import {MapControlButton} from '@kepler.gl/components';
 import {EDITOR_MODES} from '@kepler.gl/constants';
 import {Editor, MapControls} from '@kepler.gl/types';
+
+// EDITOR_MODES in this kepler version only has DRAW_POLYGON, DRAW_RECTANGLE, EDIT
+// Extend with missing modes (nebula.gl mode strings) so the toolbar renders correctly
+const EXTENDED_EDITOR_MODES = {
+  ...EDITOR_MODES,
+  DRAW_RECTANGLE: (EDITOR_MODES as any).DRAW_RECTANGLE ?? 'DRAW_RECTANGLE',
+  DRAW_CIRCLE: (EDITOR_MODES as any).DRAW_CIRCLE ?? 'DRAW_CIRCLE',
+  DRAW_FREEHAND: (EDITOR_MODES as any).DRAW_FREEHAND ?? 'DRAW_FREEHAND',
+  ROTATE: (EDITOR_MODES as any).ROTATE ?? 'ROTATE',
+  SCALE: (EDITOR_MODES as any).SCALE ?? 'SCALE',
+};
 import {setAoiGeometry, setAoiMode, clearAoi} from '../palmview/raster-state';
 
 // ── Styled Components ────────────────────────────────
@@ -135,13 +146,13 @@ type AoiTool = {
 };
 
 const AOI_TOOLS: AoiTool[] = [
-  {mode: EDITOR_MODES.DRAW_RECTANGLE, label: 'Rectangle', Icon: RectangleIcon},
-  {mode: EDITOR_MODES.DRAW_POLYGON, label: 'Polygon', Icon: PolygonIcon},
-  {mode: EDITOR_MODES.DRAW_CIRCLE, label: 'Circle', Icon: CircleIcon},
-  {mode: EDITOR_MODES.DRAW_FREEHAND, label: 'Freehand', Icon: FreehandIcon},
-  {mode: EDITOR_MODES.EDIT, label: 'Select', Icon: EditIcon},
-  {mode: EDITOR_MODES.ROTATE, label: 'Rotate', Icon: RotateIcon},
-  {mode: EDITOR_MODES.SCALE, label: 'Scale', Icon: ScaleIcon},
+  {mode: EXTENDED_EDITOR_MODES.DRAW_RECTANGLE, label: 'Rectangle', Icon: RectangleIcon},
+  {mode: EXTENDED_EDITOR_MODES.DRAW_POLYGON, label: 'Polygon', Icon: PolygonIcon},
+  {mode: EXTENDED_EDITOR_MODES.DRAW_CIRCLE, label: 'Circle', Icon: CircleIcon},
+  {mode: EXTENDED_EDITOR_MODES.DRAW_FREEHAND, label: 'Freehand', Icon: FreehandIcon},
+  {mode: EXTENDED_EDITOR_MODES.EDIT, label: 'Select', Icon: EditIcon},
+  {mode: EXTENDED_EDITOR_MODES.ROTATE, label: 'Rotate', Icon: RotateIcon},
+  {mode: EXTENDED_EDITOR_MODES.SCALE, label: 'Scale', Icon: ScaleIcon},
 ];
 
 // ── Status Dot ───────────────────────────────────────
@@ -245,7 +256,7 @@ const AoiControl: React.FC<AoiControlProps> = ({
 
       if (!next) {
         // Exiting — switch to EDIT mode (select/translate)
-        onSetEditorMode(EDITOR_MODES.EDIT);
+        onSetEditorMode(EXTENDED_EDITOR_MODES.EDIT);
       }
     },
     [panelActive, mapControls, onToggleMapControl, onSetEditorMode]

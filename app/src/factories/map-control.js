@@ -14,8 +14,7 @@ import {AiAssistantControlFactory} from '@kepler.gl/ai-assistant';
 
 import {SampleMapPanel} from '../components/map-control/map-control';
 import SqlPanelControlFactory from '../components/map-control/sql-panel-control';
-// AoiControl removed — drawing tools merged into Kepler's Draw on Map panel
-// import AoiControl from './aoi-control';
+import AoiControl from './aoi-control';
 
 const StyledMapControlPanel = styled.div`
   position: relative;
@@ -76,7 +75,8 @@ function CustomMapControlFactory(
     ...(MapControl.defaultActionComponents ?? []),
     EffectControl,
     SqlPanelControl,
-    AiAssistantControl
+    AiAssistantControl,
+    AoiControl
   ];
 
   const CustomMapControl = props => {
