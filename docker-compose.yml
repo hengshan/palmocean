@@ -1,0 +1,101 @@
+version: '3.8'
+
+# PalmView — Full Stack Development Environment
+# Usage: docker compose up
+# API:  http://localhost:8000
+# DB:   localhost:5434 (palmview/RlICGo8ARMyYFc2FLQva)
+# MinIO console: http://localhost:9001
+
+services:
+  # ── PostgreSQL + PostGIS ─────────────────────────────────────────────
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: palmview-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: palmview
+      POSTGRES_USER: palmview
+      POSTGRES_PASSWORD: RlICGo8ARMyYFc2FLQva
+    ports:
+      - "5434:5432"
+    volumes:
+      - palmview_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U palmview"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MinIO (S3-compatible object storage) ────────────────────────────
+  minio:
+    image: minio/minio
+    container_name: palmview-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: palmview
+      MINIO_ROOT_PASSWORD: RlICGo8ARMyYFc2FLQva
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - palmview_minio:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MinIO bucket initializer (runs once) ────────────────────────────
+  minio-init:
+    image: minio/mc
+    container_name: palmview-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 palmview RlICGo8ARMyYFc2FLQva &&
+      mc mb --ignore-existing local/palmview-assets &&
+      mc anonymous set download local/palmview-assets &&
+      echo 'MinIO bucket ready.'
+      "
+    restart: "no"
+
+  # ── FastAPI Backend ──────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: palmview-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      GEO_DATABASE_URL: postgresql://palmview:RlICGo8ARMyYFc2FLQva@postgres:5432/palmview
+      GEO_STORAGE_BACKEND: s3
+      GEO_S3_BUCKET: palmview-assets
+      GEO_S3_ENDPOINT: http://minio:9000
+      GEO_S3_REGION: us-east-1
+      GEO_S3_ACCESS_KEY: palmview
+      GEO_S3_SECRET_KEY: RlICGo8ARMyYFc2FLQva
+      GEO_ALLOWED_ORIGINS: '["http://localhost:8080","http://localhost:3000"]'
+      GEO_INFERENCE_API_URL: http://localhost:8001
+    volumes:
+      - ./backend:/app
+      - palmview_uploads:/app/storage/uploads
+    command: >
+      sh -c "
+      alembic upgrade head &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+volumes:
+  palmview_pgdata:
+  palmview_minio:
+  palmview_uploads:
