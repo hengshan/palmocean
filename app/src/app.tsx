@@ -227,8 +227,10 @@ const App = props => {
 
     if (duckDbPluginEnabled && query.sql) {
       dispatch(toggleMapControl('sqlPanel', 0));
-      dispatch(toggleModal(null));
     }
+
+    // PalmView: suppress default Add Data modal on startup
+    dispatch(toggleModal(null));
 
     // delay zs to show the banner
     // if (!window.localStorage.getItem(BannerKey)) {
@@ -705,7 +707,6 @@ const App = props => {
                               featureFlags={DEFAULT_FEATURE_FLAGS}
                               onViewStateChange={onViewStateChange}
                               getMapboxRef={handleGetMapboxRef}
-                              initialUiState={{currentModal: null}}
                             />
                           )}
                         </AutoSizer>
