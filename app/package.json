@@ -58,7 +58,10 @@
     "redux-logger": "^3.0.6",
     "redux-thunk": "^1.0.0",
     "styled-components": "6.1.8",
-    "usehooks-ts": "^3.1.0"
+    "usehooks-ts": "^3.1.0",
+    "three": "^0.183.1",
+    "@react-three/fiber": "^9.5.0",
+    "@react-three/drei": "^10.7.7"
   },
   "resolutions": {
     "@luma.gl/core": "8.5.21",

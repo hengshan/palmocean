@@ -16,6 +16,8 @@ from app.api.v1 import auth as auth_v1
 from app.api.v1 import data_stac
 from app.api.v1 import data_gee
 from app.api.v1 import data as data_v1
+from app.api.routes import plantation as plantation_routes
+from app.api.routes import seed3d as seed3d_routes
 from app.database import init_db
 
 
@@ -55,6 +57,8 @@ app.include_router(auth_v1.router)
 app.include_router(data_stac.router, prefix="/api/v1/data/stac", tags=["data-stac"])
 app.include_router(data_gee.router, prefix="/api/v1/data/gee", tags=["data-gee"])
 app.include_router(data_v1.router)
+app.include_router(plantation_routes.router)
+app.include_router(seed3d_routes.router)
 
 
 @app.get("/api/health")
