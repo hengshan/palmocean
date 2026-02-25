@@ -7,7 +7,7 @@ import {dotenvRun} from '@dotenv-run/esbuild';
 
 import process from 'node:process';
 import fs from 'node:fs';
-import {spawn} from 'node:child_process';
+import {spawn, execSync} from 'node:child_process';
 import {join} from 'node:path';
 import KeplerPackage from '../package.json' with {type: 'json'};
 
@@ -72,6 +72,52 @@ const checkEnvVariables = () => {
   }
 };
 
+// ─── CesiumJS static asset copy ──────────────────────────────────────────────
+/**
+ * Copy CesiumJS Workers, Assets, and Widgets into dist/cesium/ so the viewer
+ * can load them at runtime (CESIUM_BASE_URL = '/cesium/').
+ *
+ * We use execSync(cp -r) which is fast on Linux and avoids pulling in extra
+ * build dependencies.  Safe to call both in --build and --start modes.
+ */
+function copyCesiumAssets() {
+  const cesiumBuildDir = join(BASE_NODE_MODULES_DIR, 'cesium/Build/Cesium');
+  const cesiumDistDir  = 'dist/cesium';
+
+  // Bail gracefully if the package hasn't been installed yet (CI pre-install)
+  if (!fs.existsSync(cesiumBuildDir)) {
+    console.warn(
+      `⚠️  Cesium built assets not found at ${cesiumBuildDir} — skipping asset copy.\n` +
+      `   Run 'yarn install' on the build server to populate node_modules.`
+    );
+    return;
+  }
+
+  fs.mkdirSync(cesiumDistDir, { recursive: true });
+
+  for (const folder of ['Workers', 'Assets', 'Widgets', 'ThirdParty']) {
+    const src  = join(cesiumBuildDir, folder);
+    const dest = join(cesiumDistDir, folder);
+    if (fs.existsSync(src)) {
+      execSync(`cp -r "${src}" "${dest}"`, { stdio: 'inherit' });
+      console.log(`✅ Cesium ${folder} → ${dest}`);
+    }
+  }
+}
+
+// ─── Cesium esbuild plugin ────────────────────────────────────────────────────
+/**
+ * After every build, copy Cesium static assets to dist/cesium/.
+ */
+const cesiumPlugin = {
+  name: 'cesium-assets',
+  setup(build) {
+    build.onEnd(() => {
+      copyCesiumAssets();
+    });
+  },
+};
+
 const NODE_ENV = JSON.stringify(process.env.NODE_ENV || 'production');
 const config = {
   platform: 'browser',
@@ -92,7 +138,11 @@ const config = {
     // Define process.env variables for browser environment
     'process.env.MapboxAccessToken': JSON.stringify(process.env.MapboxAccessToken || ''),
     'process.env.MapboxExportToken': JSON.stringify(process.env.MapboxExportToken || ''),
-    'process.env.NODE_ENV': NODE_ENV
+    'process.env.NODE_ENV': NODE_ENV,
+    // CesiumJS Ion token (optional — OSM imagery works without a token)
+    'process.env.CESIUM_ION_TOKEN': JSON.stringify(process.env.CESIUM_ION_TOKEN || ''),
+    // Tell CesiumJS where to find its static assets at runtime
+    'CESIUM_BASE_URL': JSON.stringify('/cesium/')
   },
   plugins: [
     dotenvRun({
@@ -104,7 +154,9 @@ const config = {
     replace({
       __PACKAGE_VERSION__: KeplerPackage.version,
       include: /constants\/src\/default-settings\.ts/
-    })
+    }),
+    // Copy CesiumJS Workers/Assets/Widgets to dist/cesium/ on every build
+    cesiumPlugin
   ]
 };
 
