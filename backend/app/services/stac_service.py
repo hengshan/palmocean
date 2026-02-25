@@ -211,7 +211,8 @@ class STACService:
         params = f"url={encoded_href}&rescale={rescale}&return_mask=true"
         if bidx:
             params += f"&bidx={bidx}"
-        tile_url = f"{titiler_base}/cog/tiles/{{z}}/{{x}}/{{y}}.png?{params}"
+        # TiTiler 1.x requires TileMatrixSet in path: /cog/tiles/{TileMatrixSetId}/{z}/{x}/{y}
+        tile_url = f"{titiler_base}/cog/tiles/WebMercatorQuad/{{z}}/{{x}}/{{y}}.png?{params}"
 
         return {
             "tile_url": tile_url,
