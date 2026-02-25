@@ -1,200 +1,83 @@
 # 🌴 PalmView 产品路线图
 
-**空天地一体化机器人辅助决策系统**
-*版本 1.0 | 2026-02-20*
+**空天地一体化 AI 决策系统**
+*版本 2.0 | 2026-02-25*
 
-> 从 GIS 工具到地理空间智能操作系统 —— PalmView + RipeEye + HarvestBot
+> 我们做的不是可视化工具，而是：**决策系统 · 数字孪生系统 · 数据资产管理系统 · AI 分析引擎 · 机器人调度中枢**
+
+详细产品愿景 → [synga/00-vision/PRODUCT_VISION.md](synga/00-vision/PRODUCT_VISION.md)
 
 ---
 
-## 架构总览
+## 🏗️ 三层系统架构
 
 ```
-Frontend (Kepler.gl fork + GeoAI Tab)
-        ↓
-GeoAI API Layer (FastAPI)
-        ↓
-┌───────────────┬──────────────────┬─────────────────┐
-│ PostgreSQL    │ Object Storage   │ Tile Server     │
-│ + PostGIS    │ (COG/GeoParquet) │ (MVT/WMTS)      │
-└───────────────┴──────────────────┴─────────────────┘
-        ↓
-ML Inference (SAM2 / YOLO / Prithvi-EO / RemoteCLIP)
+🌍 PalmView          — 宏观遥感指挥系统（当前主力）
+🌴 PalmOcean         — 微观三维数字孪生系统（Sprint 2+ 启动）
+🧠 Platform Console  — 数据与模型管理内核（持续演进）
 ```
 
 ---
 
-## Phase 1 — MVP（Sprint 1-4，约2个月）
+## ✅ Sprint 1（2026-02-20 ~ 02-25）— 已完成
 
-> 目标：验证核心商业闭环 —— 用户通过极简操作，从遥感图中获取可保存的业务对象
+**目标：** GeoAI 推理链路 MVP
 
-### 1.0 界面重构：Kepler.gl Fork + GeoAI Tab 🔴 最高优先
-- [ ] **1.0.1** Clone kepler.gl fork (`git@github.com:hengshan/kepler.gl.git`)，搭建开发环境
-- [ ] **1.0.2** 分析 Kepler action/reducer/selector 架构，确定 GeoAI 扩展点
-- [ ] **1.0.3** 新增第一个 Tab "GeoAI"（放在 Layers 之前）
-- [ ] **1.0.4** GeoAI 面板 UI 设计（需全员讨论）
-  - AOI 绘制控件（框选/多边形/自由绘制）
-  - 自然语言指令输入框
-  - 模型选择器（建筑物提取/水体/棕榈树等）
-  - 推理结果列表 + 置信度滑块
-  - 任务历史面板
-- [ ] **1.0.5** Dataset Loader 适配：GeoAI 结果 inject 进 Kepler store
-- [ ] **1.0.6** 保留 Kepler 原有 4 个 Tab 功能不动
+- [x] Kepler.gl fork + GeoAI Tab 集成
+- [x] AOI 绘制 → SAM2 推理 → GeoJSON → Kepler 渲染（端到端）
+- [x] WebSocket 实时进度推送
+- [x] Confidence 颜色渐变图层
+- [x] FloatingResultsPanel 统计面板
+- [x] systemd 四服务稳定部署（szls）
+- [x] 文档体系重构（CONTEXT.md + synga/ 目录）
+- [x] Git 分支规范化（synga/main）
 
-**负责**: Iris(架构设计) + Altair(实现) | **Review**: Lyra
-**关键原则**: 走 Kepler 的 action/reducer/selector，不在 UI 层硬插私货
-
-### 1.1 数据加载与图层管理
-- [ ] **1.1.1** 多源数据接入：本地上传（GeoTIFF/卫星图/无人机航片）
-- [ ] **1.1.2** 底图切换（卫星/街道/混合）—— Kepler 已有，确认可用
-- [ ] **1.1.3** COG 支持：对象存储 + titiler tile endpoint
-- [ ] **1.1.4** 激光雷达点云基础渲染（.las/.pcd，Deck.gl 集成）
-- [ ] **1.1.5** 大数据量性能优化（栅格切片 / 点云抽稀）—— 评估 Kepler 内置能力
-
-**负责**: Altair(前端) + Lyra(后端 titiler) | **Review**: Vega
-
-### 1.2 时空数据管理
-- [ ] **1.2.1** STAC Catalog 后端：影像数据按 STAC 规范组织
-- [ ] **1.2.2** GEE 数据接口：Sentinel-2 / Landsat 按 AOI+时间检索
-- [ ] **1.2.3** STAC 浏览器集成到 GeoAI Tab（数据发现面板）
-
-**负责**: Lyra(后端) + Vega(GEE pipeline) | **Review**: Iris
-
-### 1.3 自然语言交互与 AI 提取（MVP 灵魂功能）
-- [ ] **1.3.1** "拉框 + 提示" 任务创建 UI
-- [ ] **1.3.2** 后端 GeoAI API：AOI 影像裁剪 → 模型推理 → GeoJSON 返回
-- [ ] **1.3.3** SAM2 交互式分割（点击/框选/自动）
-- [ ] **1.3.4** YOLO 棕榈树检测模型集成
-- [ ] **1.3.5** RemoteCLIP 自然语言 → 语义搜索
-- [ ] **1.3.6** 推理进度 WebSocket 实时推送
-- [ ] **1.3.7** 结果 GeoJSON 叠加高亮 + 置信度过滤
-
-**负责**: Lyra(ML/后端) + Altair(前端交互) | **Review**: Vega + Iris
-
-### 1.4 对象存储与管理
-- [ ] **1.4.1** 数据库设计：
-  - dataset_metadata（数据集元信息）
-  - model_result_metadata（推理结果元信息）
-  - map_config（地图配置）
-  - annotation_versions（标注数据版本）
-  - job_history（任务历史）
-  - 用户/权限/工作区表
-  - **device**（设备抽象 —— 为远期机器人接入预留）
-  - **task**（任务抽象 —— 统一 AI 推理任务与未来机器人任务）
-- [ ] **1.4.2** PostGIS 存储推理结果（中等规模）
-- [ ] **1.4.3** GeoParquet + MVT tile server（百万级检测结果）
-- [ ] **1.4.4** 对象属性编辑：名称、类别、自定义标签
-- [ ] **1.4.5** 多租户工作区隔离（用户 ID 关联）
-- [ ] **1.4.6** 任务历史查看 + 结果回溯
-
-**负责**: Lyra(DB设计/后端) + Vega(存储架构) | **Review**: Altair
-
-### 1.5 基础设施（Sprint 1 前置）
-- [ ] **1.5.1** Kepler.gl fork CI/CD pipeline
-- [ ] **1.5.2** dev/main 分支 + branch protection
-- [ ] **1.5.3** PR template + CODEOWNERS
-- [ ] **1.5.4** Docker Compose 本地开发环境（前端+后端+PostGIS+MinIO）
-- [ ] **1.5.5** 部署方案：dev → preview, main → production
-
-**负责**: Vega | **Review**: Lyra
+**演示地址：** http://szls.taila366a3.ts.net:8080
 
 ---
 
-## Phase 2 — 专业场景拓展与协同分析（Sprint 5-10，约3个月）
+## 🔜 Sprint 2（规划中）
 
-> 目标：深耕城市与农业场景，引入自动化工作流和空天地数据融合
+> 等 Hank 确认方向后启动
 
-### 2.1 城市应用深化
-- [ ] **2.1.1** 多光谱分析引擎：加载 Sentinel-2，计算 NDVI/NDWI/NDBI
-- [ ] **2.1.2** 基于阈值的自动分类（植被/水体/建筑/裸土）
-- [ ] **2.1.3** 太阳能板提取专用模型
-- [ ] **2.1.4** InSAR 形变监测：预处理形变图接入 + 沉降漏斗识别
-- [ ] **2.1.5** 城市违建检测模型
-
-### 2.2 农业应用深化（RipeEye 雏形）
-- [ ] **2.2.1** 时序分析：多期影像对比，生长变化检测
-- [ ] **2.2.2** BIT-CD 变化检测模型优化（棕榈树种植区域变化）
-- [ ] **2.2.3** 无人机航片拼接：上传序列图 → 后端拼接 → 正射影像生成
-- [ ] **2.2.4** 棕榈树健康度评估（病虫害分类模型）
-- [ ] **2.2.5** 果实成熟度检测模型（RipeEye 核心）
-- [ ] **2.2.6** 高清无人机航拍特征提取 pipeline
-
-### 2.3 协同与自动化
-- [ ] **2.3.1** 可视化工作流编辑器：拖拽式 "数据→模型→结果" 流程
-- [ ] **2.3.2** AI 模型广场：预训练模型一键调用
-- [ ] **2.3.3** 模型版本管理（MLflow/自建）
-- [ ] **2.3.4** 团队协作：邀请成员、角色权限、审计日志
-- [ ] **2.3.5** JupyterGIS 集成评估（高级分析工作台，WASM GDAL）
-
-### 2.4 前端架构演进
-- [ ] **2.4.1** 微前端架构：Kepler 主框架 + 独立分析微应用
-- [ ] **2.4.2** WASM 前端计算（波段运算、矢量化）
-- [ ] **2.4.3** 3D 地形渲染评估（Openglobus.org / Three.js）
+**候选方向：**
+- [ ] YOLOv8 真实权重接入（替换 mock 推理）
+- [ ] PalmOcean 数字孪生基础架构
+- [ ] 用户认证与多租户
+- [ ] STAC 数据目录集成
+- [ ] 移动端适配（农场技术员场景）
 
 ---
 
-## Phase 3 — 空天地一体化与机器人协同（Sprint 11+，远期）
+## 🗺️ 中长期路线（Phase 2-3）
 
-> 目标：数字空间与物理空间闭环，系统成为机器人的"大脑"
+### Phase 2 — 专业场景深化
 
-### 3.1 全局路径规划与任务下发
-- [ ] **3.1.1** 可达性分析引擎：基于高分卫片/航片识别可达/不可达区域（丛林/水体/陡坡）
-- [ ] **3.1.2** 自动生成采集机器人全局作业路径（障碍绕行 + 遍历优化）
-- [ ] **3.1.3** 感兴趣区域自动推送：遥感异常检测 → 生成勘测航点 → API 下发至机器人任务队列
-- [ ] **3.1.4** 导航网格生成：遥感解译结果 → 机器人可理解的 NavMesh / 任务指令
-- [ ] **3.1.5** HarvestBot 任务分配与调度界面
+- 时序分析（种植面积变化、健康度趋势）
+- 多模型协同（YOLO + SAM2 + RemoteCLIP）
+- 数据标注工作台（人工校正 → 训练数据飞轮）
+- PalmOcean MVP（3D 单株建模）
 
-### 3.2 机器人数据实时回传与融合
-- [ ] **3.2.1** 实时态势感知：机器人第一视角 LiDAR/视频流回传 + 卫星影像叠加
-- [ ] **3.2.2** 空天地数字孪生场景：3D 中实时显示机器人位置与感知范围
-- [ ] **3.2.3** 倾斜摄影模型加载与渲染
-- [ ] **3.2.4** 端侧模型更新触发：地面实况与遥感预判不符时 → 重规划 + 边缘模型远程更新
-- [ ] **3.2.5** "发现"样本自动回收：机器人纠错数据 → 训练集自动扩充
+### Phase 3 — 机器人协同
 
-### 3.3 端侧智能
-- [ ] **3.3.1** 边缘端模型部署（Jetson / 机器人端推理）
-- [ ] **3.3.2** 实时避障与路径规划（端侧 LiDAR + 视觉）
-- [ ] **3.3.3** 端云协同：边缘粗推理 → 云端精推理 → 结果回传
-
-### 3.4 Agentic AI 辅助决策
-- [ ] **3.4.1** 自然语言 → 多步任务自动编排（"检查东区健康→发现病害→派机器人采样"）
-- [ ] **3.4.2** Intent-driven analysis：系统理解意图 → 调模型 → 筛目标 → 算路径 → 下发 → 追踪 → 报告
-- [ ] **3.4.3** 实时任务状态追踪与采样报告自动生成
-
-### 3.5 多机器人协同
-- [ ] **3.5.1** 多机协同调度：无人机高空俯瞰指挥 + 多地面机器人协同作业
-- [ ] **3.5.2** 任务分片与负载均衡（大型果园场景）
-- [ ] **3.5.3** 机器人间通信与冲突避免
-
-### 3.6 全链路闭环
-- [ ] **3.6.1** 天（卫星）→ 空（无人机）→ 地（机器人）完整数据融合
-- [ ] **3.6.2** Deck.gl 海量点云聚合渲染
-- [ ] **3.6.3** 实时协同编辑地图标注
+- 无人机任务规划与调度
+- HarvestBot 集成（自动采收路径优化）
+- 实时传感器数据融合
+- 跨农场多租户 SaaS
 
 ---
 
-## 团队分工矩阵
+## 🛠️ 技术栈
 
-| 成员 | Phase 1 重点 | Phase 2 重点 | Phase 3 重点 |
-|------|-------------|-------------|-------------|
-| **Hank** 🔴 | 产品定义、GeoAI 面板设计、验收 | 场景定义、商业化 | 机器人战略 |
-| **Lyra** ✨ | ML pipeline、后端 API、DB 设计 | 模型广场、工作流引擎 | 端云协同架构 |
-| **Vega** ⭐ | CI/CD、存储架构、GEE pipeline | MLOps、模型版本管理 | 边缘部署 |
-| **Altair** 🦅 | Kepler 前端开发、GeoAI Tab 实现 | 微前端、3D 渲染 | 数字孪生 |
-| **Iris** 🌈 | UI/UX 设计、Kepler 架构分析 | 工作流编辑器设计、协作 UX | 机器人控制 UX |
-
----
-
-## Sprint 1 前置清单（本周完成）
-
-- [ ] Kepler.gl fork clone + 本地跑通 — **Altair + Iris**
-- [ ] Kepler 架构分析文档（action/reducer/selector 扩展点）— **Iris**
-- [ ] GeoAI Tab 面板 wireframe — **Iris + Hank + Lyra**
-- [ ] CI/CD + branch protection + PR template — **Vega**
-- [ ] 后端 DB schema 初稿 — **Lyra**
-- [ ] Docker Compose 开发环境 — **Vega**
-- [ ] 现有 PalmView ML 模型迁移评估 — **Lyra**
+| 层级 | 技术 |
+|------|------|
+| 前端 | Kepler.gl fork + React + Redux |
+| 后端 | FastAPI + PostgreSQL/PostGIS |
+| ML 推理 | SAM2 + YOLOv8 + RemoteCLIP + Prithvi-EO |
+| 存储 | MinIO（影像/模型权重）|
+| 部署 | systemd on szls (Tailscale) |
+| 3D（未来）| NVIDIA Isaac Sim + Seed3D |
 
 ---
 
-*"天上的星辰指引方向，地上的足迹丈量距离，空中的视野连接两者。" ✨*
+*最后更新：2026-02-25 by Lyra*
