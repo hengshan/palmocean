@@ -2,9 +2,12 @@ version: '3.8'
 
 # PalmView — Full Stack Development Environment
 # Usage: docker compose up
-# API:  http://localhost:8000
+# API:  http://localhost:8000  (or via systemd: palmview-api.service)
 # DB:   localhost:5434 (palmview/RlICGo8ARMyYFc2FLQva)
 # MinIO console: http://localhost:9001
+#
+# SAM2 inference server runs outside Docker via systemd (lntorch conda env).
+# See deploy/systemd/palmview-sam2.service
 
 services:
   # ── PostgreSQL + PostGIS ─────────────────────────────────────────────
@@ -62,30 +65,8 @@ services:
       "
     restart: "no"
 
-  # ── SAM2 Inference Server ────────────────────────────────────────────
-  sam2:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: palmview-sam2
-    restart: unless-stopped
-    ports:
-      - "8001:8001"
-    environment:
-      SAM2_DEVICE: cpu
-    volumes:
-      - ./ml:/app/ml
-      - ./backend:/app
-      - palmview_uploads:/app/storage/uploads
-    working_dir: /app
-    command: uvicorn ml.serve.sam2_server:app --host 0.0.0.0 --port 8001
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-
   # ── FastAPI Backend ──────────────────────────────────────────────────
+  # Note: For production, use systemd palmview-api.service instead.
   api:
     build:
       context: ./backend
@@ -96,8 +77,6 @@ services:
       postgres:
         condition: service_healthy
       minio:
-        condition: service_healthy
-      sam2:
         condition: service_healthy
     ports:
       - "8000:8000"
@@ -111,14 +90,16 @@ services:
       GEO_S3_SECRET_KEY: RlICGo8ARMyYFc2FLQva
       GEO_ALLOWED_ORIGINS: '["http://localhost:8080","http://localhost:3000"]'
       GEO_INFERENCE_BACKEND: local
-      GEO_INFERENCE_API_URL: http://sam2:8001
+      GEO_INFERENCE_API_URL: http://host.docker.internal:8001
     volumes:
       - ./backend:/app
       - palmview_uploads:/app/storage/uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: >
       sh -c "
       alembic upgrade head &&
-      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      uvicorn app.main_v1:app --host 0.0.0.0 --port 8000 --reload
       "
 
 volumes:

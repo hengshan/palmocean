@@ -1,0 +1,27 @@
+[Unit]
+Description=PalmView Backend API (FastAPI + uvicorn)
+After=network.target palmview-db.service
+Wants=palmview-db.service
+
+[Service]
+Type=simple
+User=hank
+WorkingDirectory=/home/hank/projects/palmview/backend
+Environment=PATH=/home/hank/projects/palmview/backend/.venv/bin:/home/hank/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=GEO_DATABASE_URL=postgresql://palmview:RlICGo8ARMyYFc2FLQva@localhost:5434/palmview
+Environment=GEO_INFERENCE_BACKEND=local
+Environment=GEO_INFERENCE_API_URL=http://localhost:8001
+Environment=GEO_STORAGE_BACKEND=s3
+Environment=GEO_S3_ENDPOINT=http://localhost:9000
+Environment=GEO_S3_BUCKET=palmview-assets
+Environment=GEO_S3_ACCESS_KEY=palmview
+Environment=GEO_S3_SECRET_KEY=RlICGo8ARMyYFc2FLQva
+ExecStartPre=/home/hank/projects/palmview/backend/.venv/bin/alembic upgrade head
+ExecStart=/home/hank/projects/palmview/backend/.venv/bin/uvicorn app.main_v1:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/palmview/api.log
+StandardError=append:/var/log/palmview/api.log
+
+[Install]
+WantedBy=multi-user.target

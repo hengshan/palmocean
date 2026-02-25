@@ -1,0 +1,19 @@
+[Unit]
+Description=PalmView SAM2 Inference Server (lntorch conda env)
+After=network.target
+
+[Service]
+Type=simple
+User=hank
+WorkingDirectory=/home/hank/projects/palmview
+Environment=PATH=/home/hank/miniconda3/envs/lntorch/bin:/home/hank/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=CONDA_DEFAULT_ENV=lntorch
+Environment=SAM2_DEVICE=cuda
+ExecStart=/home/hank/miniconda3/envs/lntorch/bin/python ml/serve/sam2_server.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/palmview/sam2.log
+StandardError=append:/var/log/palmview/sam2.log
+
+[Install]
+WantedBy=multi-user.target
