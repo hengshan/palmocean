@@ -1,7 +1,7 @@
 """Inference job management service — background task execution with WebSocket progress.
 
-Generates realistic GeoJSON FeatureCollection results with palm tree detection
-points distributed within the submitted AOI.
+Generates GeoJSON FeatureCollection results via SAM2 inference server when available,
+falling back to realistic mock palm-tree detections otherwise.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ async def _broadcast(job_id: uuid.UUID, msg: dict):
 
 
 # ---------------------------------------------------------------------------
-# GeoJSON generation helpers
+# GeoJSON generation helpers (mock fallback)
 # ---------------------------------------------------------------------------
 
 def _aoi_bbox(aoi: dict) -> tuple[float, float, float, float]:
@@ -122,6 +122,53 @@ def _generate_detections(
 
 
 # ---------------------------------------------------------------------------
+# SAM2 service integration
+# ---------------------------------------------------------------------------
+
+async def _check_sam2_health(base_url: str) -> bool:
+    """Check whether the SAM2 inference server is reachable and ready."""
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{base_url}/health")
+            if resp.status_code == 200:
+                data = resp.json()
+                logger.info("SAM2 health: %s", data)
+                return data.get("status") == "ok"
+    except Exception as e:
+        logger.debug("SAM2 health check failed: %s", e)
+    return False
+
+
+async def _call_sam2_auto(
+    base_url: str,
+    image_path: str,
+    bbox: tuple[float, float, float, float],
+) -> list[dict] | None:
+    """
+    Call /segment/auto on the SAM2 server.
+
+    Returns list of GeoJSON Feature dicts, or None on failure.
+    """
+    try:
+        import httpx
+        payload = {
+            "image_path": image_path,
+            "bbox": list(bbox),
+        }
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(f"{base_url}/segment/auto", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            features = data.get("features", [])
+            logger.info("SAM2 /segment/auto returned %d features", len(features))
+            return features
+    except Exception as e:
+        logger.warning("SAM2 /segment/auto call failed: %s", e)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Main background runner
 # ---------------------------------------------------------------------------
 
@@ -133,11 +180,17 @@ async def run_inference_background(
     params: dict | None,
 ):
     """
-    Background coroutine that simulates inference execution and produces
-    a realistic GeoJSON FeatureCollection of palm-tree detections.
+    Background coroutine that runs inference and produces a GeoJSON
+    FeatureCollection.
+
+    Strategy:
+    1. Check SAM2 server availability (GET /health).
+    2. If available → call /segment/auto with the AOI bbox.
+    3. If not available → fall back to mock tile-based detection.
     """
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    from app.config import settings
 
     engine = create_engine(db_url)
     SessionLocal = sessionmaker(bind=engine)
@@ -153,49 +206,111 @@ async def run_inference_background(
         job.started_at = datetime.now(timezone.utc)
         db.commit()
 
-        total_tiles = params.get("tiles", 16) if params else 16
-        model_name = params.get("model_name", "palm-det-v1") if params else "palm-det-v1"
         bbox = _aoi_bbox(aoi)
-        tile_ids = _generate_tile_ids(bbox, total_tiles)
-        total_tiles = len(tile_ids)  # reconcile
-
-        rng = random.Random(str(job_id))  # deterministic per job
-        all_features: list[dict] = []
+        model_name = params.get("model_name", "palm-det-v1") if params else "palm-det-v1"
         start = asyncio.get_event_loop().time()
 
-        for i, tile_id in enumerate(tile_ids, 1):
-            await asyncio.sleep(rng.uniform(0.03, 0.10))  # simulate work
+        # --- Broadcast start ---
+        await _broadcast(job_id, {
+            "type": "progress",
+            "completed": 0,
+            "total": 100,
+            "percent": 0,
+            "current_tile": "initialising",
+        })
 
-            # Compute tile sub-bbox
-            cols = max(1, int(math.ceil(math.sqrt(total_tiles))))
-            rows = max(1, math.ceil(total_tiles / cols))
-            col_idx = (i - 1) % cols
-            row_idx = (i - 1) // cols
-            lng_step = (bbox[2] - bbox[0]) / cols
-            lat_step = (bbox[3] - bbox[1]) / rows
-            tile_bbox = (
-                bbox[0] + col_idx * lng_step,
-                bbox[1] + row_idx * lat_step,
-                bbox[0] + (col_idx + 1) * lng_step,
-                bbox[1] + (row_idx + 1) * lat_step,
-            )
+        # ------------------------------------------------------------------
+        # Attempt SAM2 inference
+        # ------------------------------------------------------------------
+        sam2_base_url: str = settings.inference_api_url  # e.g. "http://localhost:8001"
+        sam2_available = await _check_sam2_health(sam2_base_url)
+        all_features: list[dict] = []
+        used_sam2 = False
 
-            tile_features = _generate_detections(tile_bbox, tile_id, model_name, rng)
-            all_features.extend(tile_features)
-
-            pct = round(i / total_tiles * 100, 2)
-            job.progress = pct
-            db.commit()
-
+        if sam2_available:
+            logger.info("SAM2 server available — calling /segment/auto for job %s", job_id)
             await _broadcast(job_id, {
                 "type": "progress",
-                "completed": i,
-                "total": total_tiles,
-                "percent": pct,
-                "current_tile": tile_id,
+                "completed": 10,
+                "total": 100,
+                "percent": 10,
+                "current_tile": "sam2_inference",
             })
 
-        # Build final GeoJSON FeatureCollection
+            # Determine image path from params (optional)
+            image_path: str | None = (params or {}).get("image_path")
+
+            if image_path:
+                sam2_features = await _call_sam2_auto(sam2_base_url, image_path, bbox)
+                if sam2_features is not None:
+                    all_features = sam2_features
+                    used_sam2 = True
+
+            # If no image_path or SAM2 call failed, fall through to mock
+
+            if used_sam2:
+                job.progress = 90
+                db.commit()
+                await _broadcast(job_id, {
+                    "type": "progress",
+                    "completed": 90,
+                    "total": 100,
+                    "percent": 90,
+                    "current_tile": "sam2_complete",
+                })
+            else:
+                logger.info("SAM2 available but no image_path provided — using mock fallback")
+
+        # ------------------------------------------------------------------
+        # Mock fallback (also used when no image_path provided)
+        # ------------------------------------------------------------------
+        if not used_sam2:
+            if sam2_available:
+                logger.info(
+                    "SAM2 available but falling back to mock (no image_path for job %s)", job_id
+                )
+            else:
+                logger.info("SAM2 not available — using mock fallback for job %s", job_id)
+
+            total_tiles = params.get("tiles", 16) if params else 16
+            tile_ids = _generate_tile_ids(bbox, total_tiles)
+            total_tiles = len(tile_ids)
+            rng = random.Random(str(job_id))
+
+            for i, tile_id in enumerate(tile_ids, 1):
+                await asyncio.sleep(rng.uniform(0.03, 0.10))  # simulate work
+
+                cols = max(1, int(math.ceil(math.sqrt(total_tiles))))
+                rows = max(1, math.ceil(total_tiles / cols))
+                col_idx = (i - 1) % cols
+                row_idx = (i - 1) // cols
+                lng_step = (bbox[2] - bbox[0]) / cols
+                lat_step = (bbox[3] - bbox[1]) / rows
+                tile_bbox = (
+                    bbox[0] + col_idx * lng_step,
+                    bbox[1] + row_idx * lat_step,
+                    bbox[0] + (col_idx + 1) * lng_step,
+                    bbox[1] + (row_idx + 1) * lat_step,
+                )
+
+                tile_features = _generate_detections(tile_bbox, tile_id, model_name, rng)
+                all_features.extend(tile_features)
+
+                pct = round(i / total_tiles * 100, 2)
+                job.progress = pct
+                db.commit()
+
+                await _broadcast(job_id, {
+                    "type": "progress",
+                    "completed": i,
+                    "total": total_tiles,
+                    "percent": pct,
+                    "current_tile": tile_id,
+                })
+
+        # ------------------------------------------------------------------
+        # Persist result
+        # ------------------------------------------------------------------
         geojson_result = {
             "type": "FeatureCollection",
             "features": all_features,
@@ -210,8 +325,8 @@ async def run_inference_background(
             format="geojson",
             uri=result_uri,
             stats={
-                "tile_count": total_tiles,
                 "feature_count": len(all_features),
+                "source": "sam2" if used_sam2 else "mock",
             },
         )
         db.add(output)
@@ -227,8 +342,8 @@ async def run_inference_background(
             "result_url": result_uri,
             "summary": {
                 "total_detections": len(all_features),
-                "tile_count": total_tiles,
                 "model_name": model_name,
+                "source": "sam2" if used_sam2 else "mock",
                 "duration_seconds": round(duration, 2),
             },
         })
