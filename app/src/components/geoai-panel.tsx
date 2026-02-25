@@ -3,6 +3,7 @@
 import React, {useState, useEffect, useCallback, useRef} from 'react';
 import styled from 'styled-components';
 import {useSelector, useDispatch} from 'react-redux';
+import {useSceneStore} from '../lib/store/sceneStore';
 import {FloatingResultsPanel} from '../palmview';
 import {
   submitInferenceJob,
@@ -326,6 +327,12 @@ const GeoAiPanelContent = () => {
   useEffect(() => { confidenceRef.current = confidenceThreshold; }, [confidenceThreshold]);
   /** Context of the currently-running job (set on submit, used by WS result handler) */
   const submittedJobRef = useRef<{job_id: string; task_type: string; created_at: string} | null>(null);
+  /** Bounding box of latest completed inference result [minLng, minLat, maxLng, maxLat] */
+  const latestBboxRef = useRef<[number, number, number, number] | null>(null);
+
+  // T5: PalmScene flyTo integration
+  const sceneOpenFn = useSceneStore(s => s.openScene);
+  const sceneIsVisible = useSceneStore(s => s.sceneVisible);
 
   // Subscribe to AOI state from raster-state
   useEffect(() => {
@@ -444,6 +451,27 @@ const GeoAiPanelContent = () => {
                 msg.geojson,
                 {confidenceThreshold: confidenceRef.current}
               );
+              // T5: compute bbox for PalmScene flyTo
+              try {
+                const coords = (msg.geojson.features ?? []).flatMap((f: any) => {
+                  const g = f?.geometry;
+                  if (!g) return [];
+                  if (g.type === 'Point') return [g.coordinates as [number, number]];
+                  if (g.type === 'Polygon') return (g.coordinates as [number, number][][]).flat();
+                  if (g.type === 'MultiPolygon') return (g.coordinates as [number, number][][][]).flat(2);
+                  return [];
+                });
+                if (coords.length > 0) {
+                  latestBboxRef.current = [
+                    Math.min(...coords.map((c: [number, number]) => c[0])),
+                    Math.min(...coords.map((c: [number, number]) => c[1])),
+                    Math.max(...coords.map((c: [number, number]) => c[0])),
+                    Math.max(...coords.map((c: [number, number]) => c[1])),
+                  ];
+                }
+              } catch (_) {
+                // bbox computation is best-effort
+              }
               // Persist to PalmOcean (non-blocking)
               persistInferenceResult({
                 model_slug: 'sam2',
@@ -669,6 +697,25 @@ const GeoAiPanelContent = () => {
               .catch(err => console.error('[GeoAI] Export failed:', err));
           }
         }}
+        onView3D={latestBboxRef.current ? () => {
+          const bbox = latestBboxRef.current!;
+          const centerLng = (bbox[0] + bbox[2]) / 2;
+          const centerLat = (bbox[1] + bbox[3]) / 2;
+          // Open PalmScene if not already visible
+          if (!sceneIsVisible) {
+            sceneOpenFn('geoai-result');
+          }
+          // FlyTo runs after CesiumViewer mounts and registers the handler
+          const attemptFlyTo = (retries = 8) => {
+            const flyTo = useSceneStore.getState().flyToCoords;
+            if (flyTo) {
+              flyTo(centerLng, centerLat, 2000);
+            } else if (retries > 0) {
+              setTimeout(() => attemptFlyTo(retries - 1), 200);
+            }
+          };
+          attemptFlyTo();
+        } : undefined}
       />
 
       {/* 3. Task History */}
