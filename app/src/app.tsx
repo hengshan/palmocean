@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright contributors to the kepler.gl project
 
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import AutoSizer from 'react-virtualized/dist/commonjs/AutoSizer';
 import styled, {ThemeProvider, StyleSheetManager} from 'styled-components';
 import Window from 'global/window';
@@ -28,7 +28,7 @@ import {replaceLoadDataModal} from './factories/load-data-modal';
 import {replaceMapControl} from './factories/map-control';
 import {replacePanelHeader} from './factories/panel-header';
 import {replaceLayerList} from './factories/layer-list';
-import {setAoiGeometry, setAoiMode, clearAoi} from './palmview/raster-state';
+import {setAoiGeometry, setAoiMode, clearAoi, reAddAllLayers, attachStyleListener} from './palmview/raster-state';
 import BottomStatusBar from './palmview/components/BottomStatusBar';
 import {CLOUD_PROVIDERS_CONFIGURATION, DEFAULT_FEATURE_FLAGS} from './constants/default-settings';
 import {messages} from './constants/localization';
@@ -216,6 +216,62 @@ const App = props => {
       delete (window as any).__PALMVIEW_AOI;
     };
   }, [editorFeatures]);
+
+  // ── Basemap change watcher ────────────────────────────────────────────────
+  // When Kepler.gl switches the basemap, it calls map.setStyle() internally.
+  // This wipes all custom imperative layers (our STAC/raster tiles).
+  // We watch the Redux styleType and, when it changes, wait for style.load
+  // on the map then re-add all our layers. This is more reliable than relying
+  // purely on the map's style.load event timing.
+  const keplerStyleType = useSelector(
+    (state: any) => state?.demo?.keplerGl?.map?.mapStyle?.styleType
+  );
+  const prevStyleTypeRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (keplerStyleType === undefined) return;
+    if (prevStyleTypeRef.current === undefined) {
+      // First render — just record the initial style, no re-add needed
+      prevStyleTypeRef.current = keplerStyleType;
+      return;
+    }
+    if (keplerStyleType === prevStyleTypeRef.current) return;
+
+    prevStyleTypeRef.current = keplerStyleType;
+    console.log('[PalmView] Basemap changed to:', keplerStyleType, '— will re-add custom layers after style.load');
+
+    const map = (window as any).__PALMVIEW_MAP;
+    if (!map) return;
+
+    // Ensure the style listener is attached to this map instance
+    attachStyleListener();
+
+    let fallbackTimer: any = null;
+
+    const onStyleLoaded = () => {
+      clearTimeout(fallbackTimer);
+      console.log('[PalmView] style.load fired after basemap switch — re-adding layers');
+      reAddAllLayers();
+    };
+
+    // One-time style.load handler — fires when the new basemap style is fully applied
+    map.once('style.load', onStyleLoaded);
+
+    // Fallback: if style.load hasn't fired after 3 s (e.g. style was already loaded),
+    // do a direct re-add
+    fallbackTimer = setTimeout(() => {
+      map.off('style.load', onStyleLoaded);
+      if (map.isStyleLoaded()) {
+        console.log('[PalmView] style.load fallback triggered — re-adding layers');
+        reAddAllLayers();
+      }
+    }, 3000);
+
+    return () => {
+      clearTimeout(fallbackTimer);
+      map.off('style.load', onStyleLoaded);
+    };
+  }, [keplerStyleType]);
 
   useEffect(() => {
     // Load sample using its id
