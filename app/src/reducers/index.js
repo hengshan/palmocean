@@ -126,11 +126,9 @@ const demoReducer = combineReducers({
       loaders: [], // Add additional loaders.gl loaders here
       loadOptions: {} // Add additional loaders.gl loader options here
     },
-    // ── Curated basemap list (5 basemaps, no Mapbox proprietary text styles)
-    // Overrides Kepler.gl's default 9-style list.
-    // CARTO styles (open, no token): dark-matter, positron, voyager
-    // Mapbox satellite (token required): pure imagery, no text
-    // Singapore OneMap (public tiles, no auth required for tiles)
+    // ── 3 curated CARTO basemaps (open, no token required, full layer group support)
+    // Satellite and OneMap removed — Mapbox proprietary URL styles interfere
+    // with the setStyle() injection mechanism. Will revisit in a future sprint.
     mapStyle: {
       styleType: 'dark-matter',
       mapStyles: {
@@ -160,22 +158,6 @@ const demoReducer = combineReducers({
           layerGroups: DEFAULT_LAYER_GROUPS,
           colorMode: 'LIGHT',
           complimentaryStyleId: 'dark-matter',
-        },
-        'satellite': {
-          id: 'satellite',
-          label: 'Satellite',
-          url: 'mapbox://styles/mapbox/satellite-v9',
-          icon: 'https://studio-public-data.foursquare.com/statics/keplergl/geodude/UBER_SATELLITE.png',
-          layerGroups: [], // raster-only, no layer groups
-          colorMode: 'DARK',
-        },
-        'onemap': {
-          id: 'onemap',
-          label: 'OneMap',
-          url: 'https://www.onemap.gov.sg/maps/json/raster/mbstyle/Default.json',
-          icon: 'https://www.onemap.gov.sg/favicon.ico',
-          layerGroups: [], // raster-only, no layer groups
-          colorMode: 'LIGHT',
         },
       },
     },
