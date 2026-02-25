@@ -63,6 +63,8 @@ MinIO Object Storage                   port 9000
 
 ## 🔄 最新变更（滚动，保留最近 5 条）
 
+- `2026-02-25` 最新 — UX_DESIGN / PALMVIEW_UI / PALMSCENE_UI 设计文档完成
+- `2026-02-25` 0f5e89e — PalmOcean 重定义为数字孪生数据中台 + PalmScene 双引擎确认
 - `2026-02-25` 279b8b7 — PalmScene 3D 组件迁移进 synga/main（three.js + r3f）
 - `2026-02-25` 0866eb5 — ml/weights/ 纳入 DVC 管理（存 MinIO szls:9000）
 - `2026-02-25` 87da7fd — 文档体系重构，synga/ 目录建立，ROADMAP v2
@@ -81,6 +83,9 @@ MinIO Object Storage                   port 9000
 | 数据库设计 | [synga/01-architecture/DATABASE_DESIGN.md](synga/01-architecture/DATABASE_DESIGN.md) |
 | DVC 数据管理 | [synga/01-architecture/DVC_GUIDE.md](synga/01-architecture/DVC_GUIDE.md) |
 | ML 模型 | [synga/02-ml/MODEL_COMPARISON.md](synga/02-ml/MODEL_COMPARISON.md) |
+| UX 交互设计 | [synga/00-vision/UX_DESIGN.md](synga/00-vision/UX_DESIGN.md) |
+| PalmView UI 规范 | [synga/03-design/PALMVIEW_UI.md](synga/03-design/PALMVIEW_UI.md) |
+| PalmScene UI 规范 | [synga/03-design/PALMSCENE_UI.md](synga/03-design/PALMSCENE_UI.md) |
 | 设计规范 | [synga/03-design/DESIGN_SYSTEM.md](synga/03-design/DESIGN_SYSTEM.md) |
 | API 规范 | [synga/04-api/DATA_ACQUISITION_API.md](synga/04-api/DATA_ACQUISITION_API.md) |
 | Sprint 记录 | [synga/05-sprint-log/](synga/05-sprint-log/) |
