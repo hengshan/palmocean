@@ -705,6 +705,7 @@ const App = props => {
                               featureFlags={DEFAULT_FEATURE_FLAGS}
                               onViewStateChange={onViewStateChange}
                               getMapboxRef={handleGetMapboxRef}
+                              initialUiState={{currentModal: null}}
                             />
                           )}
                         </AutoSizer>
