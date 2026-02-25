@@ -4,6 +4,9 @@
 import React, {useState, useEffect, useCallback, useRef, useSyncExternalStore} from 'react';
 import styled from 'styled-components';
 import {fromArrayBuffer} from 'geotiff';
+import {useDispatch} from 'react-redux';
+import {addDataToMap} from '@kepler.gl/actions';
+import {processCsvData, processGeojson} from '@kepler.gl/processors';
 import {
   getMapState,
   subscribe,
@@ -503,7 +506,9 @@ const GEEPanel = () => {
 
 const DataPanelContent = () => {
   const dt = useDataTab();
+  const dispatch = useDispatch();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const keplerFileInputRef = useRef<HTMLInputElement>(null);
 
   // Local ephemeral state (OK to lose)
   const [providers, setProviders] = useState<Record<string, STACProvider>>({});
@@ -780,6 +785,64 @@ const DataPanelContent = () => {
     }
   }, []);
 
+  // ─── Kepler Upload State ───
+  const [keplerUploadStatus, setKeplerUploadStatus] = useState<string | null>(null);
+  const [keplerDragActive, setKeplerDragActive] = useState(false);
+
+  // Upload CSV/GeoJSON directly into Kepler.gl (adds as a new data layer)
+  const handleKeplerUpload = useCallback(async (files: FileList | File[]) => {
+    const fileArr = Array.from(files).filter(f => {
+      const n = f.name.toLowerCase();
+      return n.endsWith('.csv') || n.endsWith('.geojson') || n.endsWith('.json');
+    });
+    if (fileArr.length === 0) {
+      setKeplerUploadStatus('⚠️ Only CSV, GeoJSON and JSON files are supported here');
+      return;
+    }
+    setKeplerUploadStatus('⏳ Processing...');
+    let successCount = 0;
+    for (const file of fileArr) {
+      try {
+        const text = await file.text();
+        const name = file.name.replace(/\.[^.]+$/, '');
+        const datasetId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        let data: any;
+        if (file.name.toLowerCase().endsWith('.csv')) {
+          data = processCsvData(text);
+        } else {
+          const parsed = JSON.parse(text);
+          data = processGeojson(parsed);
+        }
+        if (!data) throw new Error('Failed to parse file');
+        dispatch(addDataToMap({
+          datasets: [{
+            info: {label: name, id: datasetId},
+            data,
+          }],
+          options: {keepExistingConfig: true, centerMap: true},
+        }));
+        successCount++;
+      } catch (err: any) {
+        console.error('[KeplerUpload] Failed:', file.name, err);
+        setKeplerUploadStatus(`❌ ${file.name}: ${err.message}`);
+        return;
+      }
+    }
+    setKeplerUploadStatus(`✅ ${successCount} file${successCount !== 1 ? 's' : ''} added to map`);
+  }, [dispatch]);
+
+  const handleKeplerDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); e.stopPropagation(); setKeplerDragActive(true);
+  }, []);
+  const handleKeplerDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); e.stopPropagation(); setKeplerDragActive(false);
+  }, []);
+  const handleKeplerDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setKeplerDragActive(false);
+    if (e.dataTransfer.files.length) handleKeplerUpload(e.dataTransfer.files);
+  }, [handleKeplerUpload]);
+
   // Multi-file upload handler
   const handleMultiUpload = useCallback(async (files: FileList | File[]) => {
     const fileArr = Array.from(files);
@@ -890,8 +953,43 @@ const DataPanelContent = () => {
         <GEEPanel />
       ) : dt.source === 'local' ? (
         <>
+          {/* ── Kepler-integrated CSV/GeoJSON upload ── */}
           <Section>
-            <SectionTitle>📁 Upload Local Files</SectionTitle>
+            <SectionTitle>📤 Add Data to Map (CSV / GeoJSON)</SectionTitle>
+            <input
+              ref={keplerFileInputRef}
+              type="file"
+              accept=".csv,.geojson,.json"
+              multiple
+              style={{display: 'none'}}
+              onChange={e => {
+                if (e.target.files?.length) handleKeplerUpload(e.target.files);
+                e.target.value = '';
+              }}
+            />
+            <DropZone
+              $active={keplerDragActive}
+              onClick={() => keplerFileInputRef.current?.click()}
+              onDragOver={handleKeplerDragOver}
+              onDragLeave={handleKeplerDragLeave}
+              onDrop={handleKeplerDrop}
+            >
+              <div style={{fontSize: 24, marginBottom: 6}}>📊</div>
+              <div style={{fontSize: 11, color: '#D3D8E0', fontWeight: 500}}>
+                {keplerDragActive ? 'Drop files here' : 'Click or drag to upload'}
+              </div>
+              <Muted style={{fontSize: 10, marginTop: 4}}>CSV · GeoJSON · JSON</Muted>
+            </DropZone>
+            {keplerUploadStatus && (
+              <div style={{marginTop: 6, fontSize: 11, color: keplerUploadStatus.startsWith('❌') ? '#F9042C' : keplerUploadStatus.startsWith('✅') ? '#1FBF6E' : '#A0A7B4'}}>
+                {keplerUploadStatus}
+              </div>
+            )}
+          </Section>
+
+          {/* ── GeoTIFF / raw file upload (direct to Mapbox layer) ── */}
+          <Section>
+            <SectionTitle>📁 Upload Local Files (GeoTIFF)</SectionTitle>
             <input
               ref={fileInputRef}
               type="file"

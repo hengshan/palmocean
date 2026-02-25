@@ -311,6 +311,12 @@ const GeoAiPanelContent = () => {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [aoiState, setAoiState] = useState<AoiState>(getMapState().aoiState);
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Floating Results Panel state — declared BEFORE confidenceRef to avoid temporal dead zone
+  const [showResults, setShowResults] = useState(false);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.5);
+  const [jobOutputs, setJobOutputs] = useState<any[]>([]);
+
   // Stable refs for WS callback closures (avoids stale captures)
   const dispatchRef = useRef(dispatch);
   useEffect(() => { dispatchRef.current = dispatch; }, [dispatch]);
@@ -329,11 +335,6 @@ const GeoAiPanelContent = () => {
     (state: any) => state?.demo?.keplerGl?.map?.visState?.datasets
   );
   const dataLayerCount = keplerDatasets ? Object.keys(keplerDatasets).length : 0;
-
-  // Floating Results Panel state
-  const [showResults, setShowResults] = useState(false);
-  const [confidenceThreshold, setConfidenceThreshold] = useState(0.5);
-  const [jobOutputs, setJobOutputs] = useState<any[]>([]);
 
   // Init project
   useEffect(() => {
@@ -668,6 +669,68 @@ const GeoAiPanelContent = () => {
   );
 };
 
+// ─── Error Boundary ──────────────────────────────────────────
+
+interface GeoAiErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class GeoAiErrorBoundary extends React.Component<
+  {children: React.ReactNode},
+  GeoAiErrorBoundaryState
+> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = {hasError: false, error: null};
+  }
+
+  static getDerivedStateFromError(error: Error): GeoAiErrorBoundaryState {
+    return {hasError: true, error};
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[GeoAI] Panel error:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{padding: 16, color: '#F9042C', fontSize: 12}}>
+          <div style={{fontWeight: 600, marginBottom: 8}}>⚠️ GeoAI Panel Error</div>
+          <div style={{
+            background: 'rgba(249,4,44,0.08)',
+            border: '1px solid rgba(249,4,44,0.25)',
+            borderRadius: 4,
+            padding: '8px 12px',
+            wordBreak: 'break-all',
+            color: '#F9042C',
+          }}>
+            {this.state.error?.message || 'Unknown error'}
+          </div>
+          <button
+            style={{
+              marginTop: 12, padding: '6px 12px', background: 'rgba(249,4,44,0.15)',
+              border: '1px solid rgba(249,4,44,0.3)', borderRadius: 4,
+              color: '#F9042C', cursor: 'pointer', fontSize: 11,
+            }}
+            onClick={() => this.setState({hasError: false, error: null})}
+          >
+            ↺ Retry
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const GeoAiPanelWithBoundary: React.FC = () => (
+  <GeoAiErrorBoundary>
+    <GeoAiPanelContent />
+  </GeoAiErrorBoundary>
+);
+
 // ─── Brain Icon ──────────────────────────────────────────────
 
 const BrainIcon = (props: any) => (
@@ -691,7 +754,7 @@ function GeoAiCustomPanelsFactory() {
     id: 'geoai',
     label: 'GeoAI',
     iconComponent: BrainIcon,
-    component: GeoAiPanelContent
+    component: GeoAiPanelWithBoundary
   }];
   CustomPanels.getProps = () => ({});
   return CustomPanels;
