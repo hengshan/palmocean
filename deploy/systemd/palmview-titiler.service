@@ -1,0 +1,26 @@
+[Unit]
+Description=PalmView TiTiler COG Tile Server
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/hank/projects/palmview
+Environment=TITILER_SERVER_PORT=8003
+Environment=TITILER_SERVER_HOST=0.0.0.0
+# Optional: allow MinIO-hosted COGs via http://
+Environment=GDAL_HTTP_UNSAFESSL=YES
+Environment=CPL_VSIL_CURL_ALLOWED_EXTENSIONS=.tif,.tiff,.geotiff
+ExecStart=/home/hank/envs/titiler/bin/uvicorn titiler.application.main:app \
+    --host 0.0.0.0 \
+    --port 8003 \
+    --log-level warning \
+    --workers 2
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=palmview-titiler
+
+[Install]
+WantedBy=default.target

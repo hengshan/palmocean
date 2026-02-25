@@ -91,9 +91,19 @@ async def stac_download(provider: str, collection: str, item_id: str, req: Downl
 def stac_tile_url(
     provider: str, collection: str, item_id: str,
     asset_key: str = Query(...),
+    rescale: str = Query("0,3000", description="Min,max pixel value range for rendering"),
+    bidx: str | None = Query(None, description="Band indices e.g. '3,2,1' for RGB from multi-band"),
 ):
+    """Return a TiTiler XYZ tile URL for streaming COG raster tiles.
+
+    The returned tile_url contains {z}/{x}/{y} placeholders which the frontend
+    uses to detect and load as a raster tile source (Mapbox/MapLibre raster layer).
+    """
     try:
-        return _get_service().get_tile_url(provider, collection, item_id, asset_key)
+        return _get_service().get_tile_url(
+            provider, collection, item_id, asset_key,
+            rescale=rescale, bidx=bidx,
+        )
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
