@@ -28,6 +28,15 @@ logger = logging.getLogger(__name__)
 
 _ws_subscribers: dict[uuid.UUID, list[asyncio.Queue]] = {}
 
+# In-memory GeoJSON cache — keyed by str(job_id).
+# Cleared on restart; for MVP demo this is acceptable.
+_output_cache: dict[str, dict] = {}
+
+
+def get_cached_geojson(job_id: str) -> dict | None:
+    """Retrieve cached GeoJSON for a completed job."""
+    return _output_cache.get(job_id)
+
 
 def subscribe(job_id: uuid.UUID) -> asyncio.Queue:
     q: asyncio.Queue = asyncio.Queue()
@@ -316,7 +325,10 @@ async def run_inference_background(
             "features": all_features,
         }
 
-        result_uri = f"/outputs/{job_id}/result.geojson"
+        # Cache GeoJSON in memory so it can be served via HTTP route
+        _output_cache[str(job_id)] = geojson_result
+
+        result_uri = f"/api/v1/inference/jobs/{job_id}/geojson"
 
         output = InferenceOutput(
             org_id=job.org_id,
@@ -340,6 +352,7 @@ async def run_inference_background(
         await _broadcast(job_id, {
             "type": "complete",
             "result_url": result_uri,
+            "geojson": geojson_result,  # Inline GeoJSON for direct Kepler rendering via WebSocket
             "summary": {
                 "total_detections": len(all_features),
                 "model_name": model_name,

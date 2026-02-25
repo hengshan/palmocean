@@ -118,6 +118,25 @@ def get_job_outputs(job_id: uuid.UUID, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/jobs/{job_id}/geojson")
+def get_job_geojson(job_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Return cached GeoJSON result for a completed job.
+
+    The GeoJSON is held in an in-memory cache populated at job completion.
+    After a server restart the data is unavailable (returns 410 Gone).
+    """
+    from app.services.inference_service import get_cached_geojson
+    job = db.query(InferenceJob).filter(InferenceJob.job_id == job_id).first()
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.status != "completed":
+        raise HTTPException(409, f"Job is not complete (status: {job.status})")
+    geojson = get_cached_geojson(str(job_id))
+    if geojson is None:
+        raise HTTPException(410, "GeoJSON result no longer cached (server restarted). Re-run the job.")
+    return geojson
+
+
 @router.websocket("/jobs/{job_id}/stream")
 async def job_stream(websocket: WebSocket, job_id: uuid.UUID):
     await websocket.accept()
