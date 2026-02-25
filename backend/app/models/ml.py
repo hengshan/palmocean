@@ -156,3 +156,28 @@ class InferenceResultIndex(Base):
     feature_count: Mapped[int | None] = mapped_column(Integer)
     confidence_mean: Mapped[float | None] = mapped_column(Numeric(5, 4))
     props: Mapped[dict | None] = mapped_column(JSON, default=dict)
+
+
+# ── inference_result_drafts ───────────────────────────────────────────
+# Phase 1: lightweight persist — no auth/FK deps, stores results inline.
+# Phase 2 will link these to InferenceJob/Output once auth is complete.
+class InferenceResultDraft(Base):
+    __tablename__ = "inference_result_drafts"
+    __table_args__ = (
+        Index("ix_ird_plantation", "plantation_id"),
+        Index("ix_ird_created", "created_at"),
+        Index("ix_ird_model", "model_slug"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    plantation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    model_slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    task_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    prompt_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    prompt_params: Mapped[dict | None] = mapped_column(JSON, default=dict)
+    geojson: Mapped[dict] = mapped_column(JSON, nullable=False)
+    stats: Mapped[dict | None] = mapped_column(JSON, default=dict)
+    inference_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")

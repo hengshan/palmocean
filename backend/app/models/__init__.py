@@ -7,6 +7,7 @@ from app.models.assets import (  # noqa: F401
 )
 from app.models.ml import (  # noqa: F401
     Model, ModelVersion, InferenceJob, InferenceOutput, InferenceResultIndex,
+    InferenceResultDraft,
 )
 from app.models.kepler import (  # noqa: F401
     MapConfig, MapConfigRelease, MapConfigShare,

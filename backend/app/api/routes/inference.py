@@ -1,12 +1,16 @@
 import logging
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError
 
-from app.schemas.inference import PointPrompt, BoxPrompt, AutoPrompt, SemanticPrompt, TextPrompt, InferenceResponse
+from app.schemas.inference import (
+    PointPrompt, BoxPrompt, AutoPrompt, SemanticPrompt, TextPrompt, InferenceResponse,
+    PersistRequest, PersistResponse, SavedResultResponse, SavedResultListResponse, SavedResultListItem,
+)
 from app.tasks.inference import run_point_inference, run_box_inference, run_auto_inference, run_semantic_inference, run_text_inference
 from app.services.inference.sam_service import sam_service
+from app.services.inference.persist_service import persist_result, get_result, list_results
 
 logger = logging.getLogger(__name__)
 
@@ -112,3 +116,92 @@ async def infer_text(prompt: TextPrompt):
         return await run_text_inference(prompt.image_id, prompt.prompt, bbox)
     except Exception as exc:
         _handle_inference_error(exc, "text inference")
+
+
+# ── Persist endpoints ─────────────────────────────────────────────────
+
+@router.post("/persist", response_model=PersistResponse, status_code=201)
+async def persist_inference_result(body: PersistRequest):
+    """Persist a completed inference result to PalmOcean DB (Phase 1: inline storage)."""
+    try:
+        draft = persist_result(
+            model_slug=body.model_slug,
+            task_type=body.task_type,
+            prompt_type=body.prompt_type,
+            geojson=body.geojson,
+            stats=body.stats,
+            prompt_params=body.prompt_params,
+            plantation_id=body.plantation_id,
+            project_id=body.project_id,
+            inference_time_ms=body.inference_time_ms,
+            image_url=body.image_url,
+        )
+        return PersistResponse(
+            id=draft.id,
+            created_at=draft.created_at,
+            permalink=f"/api/inference/results/{draft.id}",
+        )
+    except Exception as exc:
+        logger.exception("Failed to persist inference result: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to persist inference result.")
+
+
+@router.get("/results/{result_id}", response_model=SavedResultResponse)
+async def get_saved_result(result_id: str):
+    """Fetch a single saved inference result by ID."""
+    try:
+        draft = get_result(result_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid result ID format.")
+    if draft is None:
+        raise HTTPException(status_code=404, detail="Inference result not found.")
+    return SavedResultResponse(
+        id=draft.id,
+        plantation_id=draft.plantation_id,
+        project_id=draft.project_id,
+        model_slug=draft.model_slug,
+        task_type=draft.task_type,
+        prompt_type=draft.prompt_type,
+        prompt_params=draft.prompt_params,
+        geojson=draft.geojson,
+        stats=draft.stats,
+        inference_time_ms=draft.inference_time_ms,
+        image_url=draft.image_url,
+        created_at=draft.created_at,
+    )
+
+
+@router.get("/results", response_model=SavedResultListResponse)
+async def list_saved_results(
+    project_id: str | None = Query(None),
+    plantation_id: str | None = Query(None),
+    model_slug: str | None = Query(None),
+    task_type: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    """List saved inference results with optional filters."""
+    total, items = list_results(
+        project_id=project_id,
+        plantation_id=plantation_id,
+        model_slug=model_slug,
+        task_type=task_type,
+        page=page,
+        page_size=page_size,
+    )
+    return SavedResultListResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=[
+            SavedResultListItem(
+                id=d.id,
+                plantation_id=d.plantation_id,
+                model_slug=d.model_slug,
+                task_type=d.task_type,
+                stats=d.stats,
+                created_at=d.created_at,
+            )
+            for d in items
+        ],
+    )
