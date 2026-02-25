@@ -32,6 +32,8 @@ export interface FloatingResultsPanelProps {
   onConfidenceChange: (value: number) => void;
   onAddToMap: () => void;
   onExport: (format: string) => void;
+  /** Called when user clicks the "3D Preview" button — triggers PalmScene flyTo */
+  onView3D?: () => void;
 }
 
 // ── Styled Components ────────────────────────────────
@@ -266,6 +268,7 @@ export const FloatingResultsPanel: React.FC<FloatingResultsPanelProps> = ({
   onConfidenceChange,
   onAddToMap,
   onExport,
+  onView3D,
 }) => {
   const [minimized, setMinimized] = useState(false);
   const [pinned, setPinned] = useState(true);
@@ -408,6 +411,11 @@ export const FloatingResultsPanel: React.FC<FloatingResultsPanelProps> = ({
           {isComplete && (
             <StyledActionBar>
               <StyledButton onClick={() => onExport('geojson')}>Export ▾</StyledButton>
+              {onView3D && (
+                <StyledButton onClick={onView3D} title="在 PalmScene 3D 视图中查看推理结果">
+                  🌍 3D 预览
+                </StyledButton>
+              )}
               <StyledButton $primary onClick={onAddToMap}>
                 Add to Map
               </StyledButton>
