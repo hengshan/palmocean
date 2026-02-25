@@ -342,9 +342,27 @@ function patchMapSetStyle(map: any): void {
   _setStylePatched = true;
   const origSetStyle = map.setStyle.bind(map);
   map.setStyle = function(style: any, options?: any) {
+    // react-map-gl uses styleDiffing:true by default.
+    // MapLibre diff compares new style against the last-applied style JSON (NOT
+    // current rendered state). If we inject our source into the new style AND it
+    // already exists on the map from an imperative addSource() call, diff would
+    // try to add it again → "Source already exists" exception → injection fails.
+    //
+    // Fix: remove our layers/sources BEFORE the style swap so diff sees them as
+    // new additions and re-adds them cleanly from the injected style.
+    const layers = _state.dataTab.loadedLayers;
+    for (const layer of layers) {
+      if (layer.subLayerIds) {
+        for (const subId of layer.subLayerIds) {
+          try { if (map.getLayer(subId)) map.removeLayer(subId); } catch (_) {}
+        }
+      }
+      try { if (map.getLayer(layer.id)) map.removeLayer(layer.id); } catch (_) {}
+      try { if (map.getSource(layer.sourceId)) map.removeSource(layer.sourceId); } catch (_) {}
+    }
     return origSetStyle(injectOurLayersIntoStyle(style), options);
   };
-  console.log('[raster-state] map.setStyle patched — custom layers will persist across basemap switches');
+  console.log('[raster-state] map.setStyle patched — layers injected on every basemap switch');
 }
 
 /**

@@ -6,7 +6,7 @@ import {handleActions} from 'redux-actions';
 import Task, {withTask} from 'react-palm/tasks';
 
 import {aiAssistantReducer} from '@kepler.gl/ai-assistant';
-import {EXPORT_MAP_FORMATS} from '@kepler.gl/constants';
+import {EXPORT_MAP_FORMATS, DEFAULT_LAYER_GROUPS} from '@kepler.gl/constants';
 import {processGeojson, processRowObject, processArrowTable} from '@kepler.gl/processors';
 import keplerGlReducer, {combinedUpdaters, uiStateUpdaters} from '@kepler.gl/reducers';
 import KeplerGlSchema from '@kepler.gl/schemas';
@@ -139,7 +139,7 @@ const demoReducer = combineReducers({
           label: 'Dark',
           url: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
           icon: 'https://studio-public-data.foursquare.com/statics/keplergl/geodude/DARKMATTER.png',
-          layerGroups: [],
+          layerGroups: DEFAULT_LAYER_GROUPS,
           colorMode: 'DARK',
           complimentaryStyleId: 'positron',
         },
@@ -148,7 +148,7 @@ const demoReducer = combineReducers({
           label: 'Light',
           url: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
           icon: 'https://studio-public-data.foursquare.com/statics/keplergl/geodude/POSITRON.png',
-          layerGroups: [],
+          layerGroups: DEFAULT_LAYER_GROUPS,
           colorMode: 'LIGHT',
           complimentaryStyleId: 'dark-matter',
         },
@@ -157,7 +157,7 @@ const demoReducer = combineReducers({
           label: 'Street',
           url: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
           icon: 'https://studio-public-data.foursquare.com/statics/keplergl/geodude/VOYAGER.png',
-          layerGroups: [],
+          layerGroups: DEFAULT_LAYER_GROUPS,
           colorMode: 'LIGHT',
           complimentaryStyleId: 'dark-matter',
         },
@@ -166,7 +166,7 @@ const demoReducer = combineReducers({
           label: 'Satellite',
           url: 'mapbox://styles/mapbox/satellite-v9',
           icon: 'https://studio-public-data.foursquare.com/statics/keplergl/geodude/UBER_SATELLITE.png',
-          layerGroups: [],
+          layerGroups: [], // raster-only, no layer groups
           colorMode: 'DARK',
         },
         'onemap': {
@@ -174,7 +174,7 @@ const demoReducer = combineReducers({
           label: 'OneMap',
           url: 'https://www.onemap.gov.sg/maps/json/raster/mbstyle/Default.json',
           icon: 'https://www.onemap.gov.sg/favicon.ico',
-          layerGroups: [],
+          layerGroups: [], // raster-only, no layer groups
           colorMode: 'LIGHT',
         },
       },
