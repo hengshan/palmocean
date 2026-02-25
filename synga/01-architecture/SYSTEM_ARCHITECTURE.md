@@ -7,56 +7,69 @@
 
 ## 一、产品定位与系统边界
 
-PalmView 不是可视化工具，而是：
-- **决策系统** — 把卫星/无人机图像转化为管理决策依据
-- **数字孪生系统** — 现实种植园的数字镜像（PalmOcean）
-- **AI 分析引擎** — 自动目标识别、变化检测、健康评估
-- **机器人调度中枢** — 未来连接 HarvestBot 无人采摘
+**四层产品架构：**
+
+```
+🌍 PalmView    — 2D/2.5D 遥感分析驾驶舱（Kepler.gl fork）
+🌲 PalmScene   — 3D 地理空间数字孪生可视化（CesiumJS 主 + Three.js 辅）
+────────────────────────────────────────────
+🌊 PalmOcean   — 数字孪生数据中台（后端核心，不是展示平台）
+🧠 Platform    — 数据与模型管理内核（管理员后台）
+```
+
+**PalmOcean 是什么：**
+- PalmView 和 PalmScene 都只是 PalmOcean 的"窗口"，没有它两者都是空壳
+- 物理世界每时每刻发生的事，都在 PalmOcean 里留下痕迹
+- 核心能力：IoT 实时同步 + 时序存储 + 数字状态机 + 统一 API
+
+**PalmScene 技术选型说明：**
+- **主引擎 CesiumJS**：真实 WGS84 坐标、地形、3D Tiles、点云大规模渲染
+- **辅助引擎 Three.js**：高度定制元素（机器人 mesh、仪表 overlay、特效）
 
 ---
 
 ## 二、整体架构分层
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    客户端层 (Browser)                            │
-│                                                                  │
-│  ┌─────────────────────────┐  ┌──────────────────────────────┐  │
-│  │     PalmView (2D/GIS)   │  │     PalmOcean (3D 数字孪生)   │  │
-│  │  Kepler.gl fork         │  │  Three.js + @react-three/fiber│  │
-│  │  + GeoAI Tab            │  │  + @react-three/drei          │  │
-│  │  + Redux store          │  │  + sceneStore (Zustand→Redux) │  │
-│  └─────────┬───────────────┘  └──────────────┬───────────────┘  │
-│            │ 用户在地图上点击种植园               │                  │
-│            └───────────────┬──────────────────┘                  │
-└────────────────────────────┼────────────────────────────────────┘
-                             │ REST API / WebSocket
-┌────────────────────────────▼────────────────────────────────────┐
-│                    后端 API 层 (FastAPI)                          │
-│  端口: 8000 | 入口: main_v1.py                                   │
-│                                                                  │
-│  /api/v1/inference    — SAM2 推理任务（WebSocket 进度）           │
-│  /api/v1/models       — AI 模型注册表                            │
-│  /api/v1/projects     — 项目管理                                  │
-│  /api/v1/map-configs  — Kepler 地图配置持久化                     │
-│  /api/v1/assets       — 数据资产管理                              │
-│  /api/v1/auth         — 认证                                      │
-│  /api/v1/data/stac    — STAC 时空数据目录                         │
-│  /api/v1/data/gee     — Google Earth Engine 接入                  │
-│  /api/plantations     — 种植园 CRUD（PalmOcean）                  │
-│  /api/seed3d          — Seed3D 3D 模型生成                        │
-└──────────┬──────────────────────┬──────────────────────────────┘
-           │                      │
-    ┌──────▼──────┐      ┌────────▼────────┐
-    │  ML 推理层  │      │   数据存储层     │
-    │ port 8001   │      │                 │
-    │ SAM2 server │      │ PostgreSQL/PostGIS│
-    │ YOLOv8      │      │ port 5434        │
-    │ RemoteCLIP  │      │                 │
-    │ Prithvi-EO  │      │ MinIO (S3兼容)   │
-    └──────┬──────┘      │ port 9000        │
-           │              │ bucket: palmview-data │
-    GPU 推理              └─────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                      客户端层 (Browser)                           │
+│                                                                   │
+│  ┌──────────────────────┐   ┌─────────────────────────────────┐  │
+│  │  🌍 PalmView (2D/GIS) │   │  🌲 PalmScene (3D 孪生可视化)    │  │
+│  │  Kepler.gl fork       │   │  主: CesiumJS (地形/点云/Tiles)  │  │
+│  │  + GeoAI Tab          │   │  辅: Three.js + @react-three    │  │
+│  │  + Redux store        │   │  (机器人/定制3D元素)             │  │
+│  └──────────┬────────────┘   └────────────────┬────────────────┘  │
+│             │ 点击种植园 →                       │ 实时状态订阅      │
+│             └──────────────────┬───────────────┘                  │
+└──────────────────────────────  │  ──────────────────────────────── ┘
+                                 │ REST API / WebSocket
+┌────────────────────────────────▼─────────────────────────────────┐
+│                     🌊 PalmOcean — 数字孪生数据中台                │
+│                                                                   │
+│  ┌─────────────────┐  ┌──────────────────┐  ┌─────────────────┐  │
+│  │  IoT 实时同步   │  │  时序数据存储    │  │  数字状态机     │  │
+│  │  MQTT broker    │  │  TimescaleDB     │  │  每棵树/机器人  │  │
+│  │  WebSocket      │  │  历史趋势分析    │  │  的数字镜像     │  │
+│  └─────────────────┘  └──────────────────┘  └─────────────────┘  │
+│                                                                   │
+│  FastAPI 后端 (port 8000) — main_v1.py                            │
+│  /api/v1/inference  /api/v1/models  /api/v1/projects              │
+│  /api/v1/map-configs  /api/v1/assets  /api/v1/auth                │
+│  /api/v1/data/stac  /api/v1/data/gee  /api/v1/data               │
+│  /api/plantations (种植园 CRUD)  /api/seed3d (3D 模型生成)         │
+└──────────┬───────────────────────────┬───────────────────────────┘
+           │                           │
+    ┌──────▼──────┐           ┌────────▼──────────┐
+    │  ML 推理层  │           │    数据存储层       │
+    │  port 8001  │           │                   │
+    │  SAM2       │           │  PostgreSQL/PostGIS│
+    │  YOLOv8     │           │  port 5434         │
+    │  RemoteCLIP │           │                   │
+    │  Prithvi-EO │           │  MinIO (S3兼容)    │
+    └──────┬──────┘           │  port 9000         │
+           │                  │  palmview-data     │
+    GPU 推理                  └───────────────────┘
     shanzi RTX5090
     (Tailscale)
 ```
@@ -98,34 +111,86 @@ const KeplerGl = injectComponents([[CustomPanelsFactory, GeoAIPanelFactory]])
 
 ---
 
-### 3.2 PalmOcean (3D 数字孪生 — Three.js)
+### 3.2 PalmScene (3D 数字孪生可视化)
 
-**技术栈：** Three.js v0.183 + @react-three/fiber v9.5 + @react-three/drei v10.7
+**定位：** PalmOcean 数据的 3D 渲染层，不是独立系统
 
-**组件结构：**
+**技术栈（双引擎）：**
+
+| 引擎 | 版本 | 职责 |
+|------|------|------|
+| **CesiumJS**（主） | latest | 地形、3D Tiles、点云、真实 WGS84 坐标 |
+| **Three.js + r3f**（辅） | 0.183 + r3f 9.5 | 机器人 mesh、仪表 overlay、高度定制元素 |
+
+**为什么 CesiumJS 是主引擎：**
+- 棕榈树点云 / LiDAR 扫描 → 3D Tiles 标准，百万级点渲染
+- 地形真实高程，机器人路径在真实地面上行走
+- 原生时序支持，机器人作业路径可回放
+- Three.js 只处理 CesiumJS 无法优雅实现的部分
+
+**当前实现（Sprint 1 骨架，Three.js）：**
 ```
 app/src/components/palmscene/
 ├── PalmScene.tsx          # 主场景容器（Canvas + 轨道控制）
 ├── Ground.tsx             # 地面平面（接收 GeoJSON boundary）
-├── PalmTree.tsx           # 棕榈树 3D 对象（health 颜色编码）
-├── HarvestBot.tsx         # 机器人可视化（idle/moving/harvesting 状态）
+├── PalmTree.tsx           # 棕榈树 3D（health 颜色编码）
+├── HarvestBot.tsx         # 机器人可视化（idle/moving/harvesting）
 ├── SkyEnvironment.tsx     # 天空盒 + 光照
-├── SceneControls.tsx      # 轨道控制器（OrbitControls）
-├── SceneUI.tsx            # 场景内 UI overlay（选中资产信息）
-├── PlantationModal.tsx    # 从 PalmView 地图触发的入口模态框
-└── index.ts               # 统一导出
+├── SceneControls.tsx      # 轨道控制器
+├── SceneUI.tsx            # 场景内 UI overlay
+├── PlantationModal.tsx    # 从 PalmView 地图触发的入口
+└── index.ts
 ```
 
-**与 PalmView 的集成方式：**
-- 用户在 Kepler 地图上点击种植园 polygon → 触发 Redux action
-- `PlantationModal` 接收 `plantationId` + `boundary`（GeoJSON）
-- PalmScene 根据 boundary 渲染地块 + 棕榈树 + 机器人
+**与 PalmView 的集成：**
+- 用户在 Kepler 地图上点击种植园 polygon → Redux action → PlantationModal
+- `PalmScene` 接收 `plantationId` + `boundary`（GeoJSON）
+- 从 PalmOcean API 获取实时状态，渲染树 + 机器人
 
-**⚠️ 待办：** `sceneStore.ts` 目前是 Zustand，需适配为 Redux（与 Kepler store 统一）
+**待办（Sprint 2+）：**
+- `sceneStore.ts` 从 Zustand 适配为 Redux
+- CesiumJS 主引擎迁移（替换 Three.js Canvas 为 Cesium Viewer）
+- 接入 PalmOcean 实时 WebSocket 数据流
 
 ---
 
-## 四、后端架构
+## 四、PalmOcean — 数字孪生数据中台
+
+**PalmOcean 是后端核心，不是展示层。** 它是整个系统的"心跳"。
+
+### 四大核心能力
+
+**1. 实时状态同步（物理 → 数字）**
+```
+IoT 传感器 (土壤/气温/NDVI)
+    → MQTT broker
+    → PalmOcean 状态引擎
+    → 更新数字孪生状态
+    → WebSocket 推送给 PalmView/PalmScene
+```
+
+**2. 时序数据存储**
+- TimescaleDB（PostgreSQL 扩展）存储传感器时序数据
+- 每棵树的历史健康分、NDVI、采收记录
+- 每台设备的轨迹和操作日志
+
+**3. 数字状态机**
+- 每个物理实体（树/机器人/地块）都有一个数字镜像对象
+- 状态变化 → 事件流 → 告警/通知/PalmView 实时着色
+
+**4. 统一数据 API**
+- REST — 历史查询（PalmView 图表数据）
+- WebSocket — 实时推送（地图上的树实时变色）
+- 开放 API — ERP/供应链第三方集成
+
+### 当前实现状态
+- `/api/plantations` — 种植园 CRUD ✅（Sprint 1 迁移完成）
+- `/api/seed3d` — Seed3D 3D 模型生成 ✅（Mock，待接入真实 API）
+- IoT 接入层 — 🔜 Sprint 3+ 规划
+
+---
+
+## 五、后端架构
 
 **技术栈：** FastAPI + SQLAlchemy + PostgreSQL/PostGIS + MinIO
 
@@ -154,7 +219,7 @@ systemctl --user start palmview-db.service     # PostgreSQL port 5434
 
 ---
 
-## 五、ML / AI 推理层
+## 六、ML / AI 推理层
 
 | 模型 | 用途 | 状态 |
 |------|------|------|
@@ -172,7 +237,7 @@ systemctl --user start palmview-db.service     # PostgreSQL port 5434
 
 ---
 
-## 六、数据架构
+## 七、数据架构
 
 ```
 数据流：
@@ -193,7 +258,7 @@ systemctl --user start palmview-db.service     # PostgreSQL port 5434
 
 ---
 
-## 七、部署架构
+## 八、部署架构
 
 **当前（MVP）：** 单机部署 on szls
 
@@ -217,7 +282,7 @@ szls (Tailscale: szls.taila366a3.ts.net)
 
 ---
 
-## 八、未来规划（仿真层）
+## 九、未来规划（仿真层）
 
 **Isaac Sim 集成（Phase 3）：**
 ```
@@ -230,7 +295,7 @@ Seed3D API（火山引擎）
 
 ---
 
-## 九、开发规范快速参考
+## 十、开发规范快速参考
 
 | 原则 | 规范 |
 |------|------|

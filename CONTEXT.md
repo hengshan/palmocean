@@ -9,11 +9,14 @@
 
 PalmView 是 Synga 的核心产品，**不是可视化工具，而是**：
 
-| 系统 | 定位 |
-|------|------|
-| 🌍 PalmView | 宏观遥感指挥系统 — 卫星/无人机图像 → AI 分析 → 决策支持 |
-| 🌴 PalmOcean | 微观三维数字孪生系统 — 地块级精准管理 |
-| 🧠 Platform GIS Console | 数据与模型管理内核 — 数据资产 + AI 引擎 + 机器人调度 |
+| 系统 | 层次 | 定位 |
+|------|------|------|
+| 🌍 PalmView | 前端 | 2D/2.5D 遥感分析驾驶舱（Kepler.gl fork）|
+| 🌲 PalmScene | 前端 | 3D 地理空间数字孪生可视化（CesiumJS 主 + Three.js 辅）|
+| 🌊 PalmOcean | **后端核心** | 数字孪生数据中台（IoT + 时序 + 状态机 + API）|
+| 🧠 Platform GIS Console | 后台 | 数据资产 + AI 模型管理 + 机器人调度 |
+
+> PalmView 和 PalmScene 都是 PalmOcean 的"窗口"，没有 PalmOcean 两者都是空壳。
 
 核心行业：棕榈油 AgriTech（空天地一体化智能）
 
