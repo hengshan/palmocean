@@ -258,13 +258,24 @@ export function reAddAllLayers(): void {
 
   console.log('[raster-state] Re-adding', layers.length, 'layers after style change');
 
-  // Wait a tick for style to be fully loaded
-  setTimeout(() => {
+  // Use 'idle' event to wait until the map + react-map-gl have fully settled
+  // (more reliable than a fixed 100ms timeout)
+  const doReAdd = () => {
     const firstSymbolId = map.getStyle()?.layers?.find((l: any) => l.type === 'symbol')?.id;
 
     for (const layer of layers) {
       try {
-        if (map.getSource(layer.sourceId)) continue; // already exists
+        const sourceExists = !!map.getSource(layer.sourceId);
+        const layerExists = !!map.getLayer(layer.id);
+
+        // Both exist → nothing to do
+        if (sourceExists && layerExists) continue;
+
+        // Source exists but layer is missing → remove stale source first, then re-add both
+        if (sourceExists && !layerExists) {
+          console.warn('[raster-state] Source exists but layer missing, re-adding both:', layer.id);
+          try { map.removeSource(layer.sourceId); } catch (_) {}
+        }
 
         if (layer.sourceType === 'vector' && layer.geojsonData) {
           map.addSource(layer.sourceId, { type: 'geojson', data: layer.geojsonData });
@@ -304,21 +315,31 @@ export function reAddAllLayers(): void {
         console.warn('[raster-state] Failed to re-add layer:', layer.id, e);
       }
     }
-  }, 100);
+  };
+
+  // Wait for map to be fully idle (react-map-gl has re-added its own layers),
+  // then re-add our custom raster/image layers on top.
+  if (map.isStyleLoaded()) {
+    // Style already settled — use idle to let react-map-gl finish its reconciliation
+    map.once('idle', doReAdd);
+  } else {
+    // Fallback: style not yet loaded, retry after a short delay
+    setTimeout(doReAdd, 300);
+  }
 }
 
-// Setup style.load listener (call once when map is available)
-let _styleListenerAttached = false;
+// Setup style.load listener — tracks map instance so listener is re-attached if map changes
+let _styleListenerMap: any = null;
 export function attachStyleListener(): void {
-  if (_styleListenerAttached) return;
   const map = (window as any).__PALMVIEW_MAP;
   if (!map) return;
-  _styleListenerAttached = true;
+  if (_styleListenerMap === map) return; // already attached to this instance
+  _styleListenerMap = map;
   map.on('style.load', () => {
-    console.log('[raster-state] style.load detected, re-adding layers...');
+    console.log('[raster-state] style.load detected, scheduling layer re-add...');
     reAddAllLayers();
   });
-  console.log('[raster-state] style.load listener attached');
+  console.log('[raster-state] style.load listener attached to map instance');
 }
 
 // ── Raster Layer Actions ─────────────────────────────
