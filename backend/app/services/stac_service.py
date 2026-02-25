@@ -200,6 +200,13 @@ class STACService:
         href = item_data["assets"][asset_key]["href"]
         asset_type = item_data["assets"][asset_key].get("type", "")
 
+        # Auto-select rescale range based on asset type:
+        # - visual / rendered_preview / TCI = UINT8 (already 0-255, display-ready)
+        # - raw spectral bands (B02/B03/B04 etc.) = UInt16 reflectance (0-10000)
+        # Applying rescale=0,3000 to a UINT8 TCI makes all pixels appear nearly black.
+        if rescale == "0,3000" and asset_key in ("visual", "rendered_preview", "tilejson"):
+            rescale = "0,255"
+
         # Build TiTiler COG tile URL.
         # IMPORTANT: URL-encode the COG href so that any embedded query params
         # (SAS tokens contain ?sv=...&se=...&sig=... characters) are not split by
