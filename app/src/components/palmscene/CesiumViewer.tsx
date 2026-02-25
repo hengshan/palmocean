@@ -82,6 +82,7 @@ export default function CesiumViewer({
     if (!containerRef.current) return;
 
     // Silence Ion telemetry — we use OSM, token is optional
+    // Token injected at build time via esbuild define (see esbuild.config.mjs)
     Cesium.Ion.defaultAccessToken = process.env.CESIUM_ION_TOKEN ?? '';
 
     const viewer = new Cesium.Viewer(containerRef.current, {
