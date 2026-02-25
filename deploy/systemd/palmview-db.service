@@ -10,8 +10,8 @@ User=hank
 WorkingDirectory=/home/hank/projects/palmview
 ExecStart=/usr/bin/docker compose up -d postgres minio
 ExecStop=/usr/bin/docker compose stop postgres minio
-StandardOutput=append:/var/log/palmview/db.log
-StandardError=append:/var/log/palmview/db.log
+StandardOutput=append:/home/hank/logs/palmview/db.log
+StandardError=append:/home/hank/logs/palmview/db.log
 
 [Install]
 WantedBy=multi-user.target

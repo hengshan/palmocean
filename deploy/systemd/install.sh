@@ -9,9 +9,8 @@ SERVICES=(palmview-db palmview-api palmview-frontend palmview-sam2)
 
 echo "📦 Installing PalmView systemd services..."
 
-# Create log directory
-sudo mkdir -p /var/log/palmview
-sudo chown hank:hank /var/log/palmview
+# Create log directory (no sudo needed)
+mkdir -p /home/hank/logs/palmview
 
 # Copy unit files
 for svc in "${SERVICES[@]}"; do

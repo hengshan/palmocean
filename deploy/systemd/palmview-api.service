@@ -20,8 +20,8 @@ ExecStartPre=/home/hank/projects/palmview/backend/.venv/bin/alembic upgrade head
 ExecStart=/home/hank/projects/palmview/backend/.venv/bin/uvicorn app.main_v1:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
-StandardOutput=append:/var/log/palmview/api.log
-StandardError=append:/var/log/palmview/api.log
+StandardOutput=append:/home/hank/logs/palmview/api.log
+StandardError=append:/home/hank/logs/palmview/api.log
 
 [Install]
 WantedBy=multi-user.target
