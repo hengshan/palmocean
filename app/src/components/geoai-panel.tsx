@@ -15,6 +15,7 @@ import {
   addResultsToKeplerMap,
   addGeoJSONToKeplerMap,
   getJobOutputs,
+  persistInferenceResult,
   type InferenceJobDetail,
   type InferenceJobSubmit,
   type WSInferenceMessage,
@@ -316,6 +317,7 @@ const GeoAiPanelContent = () => {
   const [showResults, setShowResults] = useState(false);
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.5);
   const [jobOutputs, setJobOutputs] = useState<any[]>([]);
+  const [savedResult, setSavedResult] = useState<{outputId: string; permalink: string} | null>(null);
 
   // Stable refs for WS callback closures (avoids stale captures)
   const dispatchRef = useRef(dispatch);
@@ -432,7 +434,44 @@ const GeoAiPanelContent = () => {
           if (msg.type === 'complete') {
             setActiveJob(prev => prev ? {...prev, status: 'complete', progress: 1} : prev);
             setShowResults(true);
-            // Fetch proper outputs from API (for export URI and authoritative stats)
+            setSavedResult(null); // reset badge while saving
+
+            // Backend now inlines GeoJSON in complete message — add to map immediately
+            if (msg.geojson && submittedJobRef.current) {
+              addGeoJSONToKeplerMap(
+                dispatchRef.current,
+                submittedJobRef.current,
+                msg.geojson,
+                {confidenceThreshold: confidenceRef.current}
+              );
+              // Persist to PalmOcean (non-blocking)
+              persistInferenceResult({
+                model_slug: 'sam2',
+                task_type: submittedJobRef.current.task_type,
+                prompt_type: 'auto',
+                geojson: msg.geojson,
+                stats: msg.summary as Record<string, unknown> | undefined,
+                project_id: projectId,
+                inference_time_ms: msg.summary?.duration_seconds
+                  ? Math.round(msg.summary.duration_seconds * 1000)
+                  : null,
+              }).then(saved => {
+                setSavedResult({outputId: saved.output_id, permalink: saved.permalink});
+              }).catch(err => {
+                console.warn('[GeoAI] PalmOcean persist failed (non-blocking):', err);
+              });
+            }
+            // Pre-populate stats from WS summary
+            if (msg.summary) {
+              setJobOutputs([{
+                output_id: 'ws-complete',
+                output_type: 'geojson',
+                format: 'geojson',
+                uri: msg.result_url || '',
+                stats: msg.summary,
+              } as any]);
+            }
+            // Fetch authoritative output records from API (for export URI)
             getJobOutputs(result.job_id).then(res => {
               if (res.outputs?.length) setJobOutputs(res.outputs);
             }).catch(() => {});
@@ -599,6 +638,7 @@ const GeoAiPanelContent = () => {
         job={activeJob as any}
         outputs={jobOutputs}
         confidenceThreshold={confidenceThreshold}
+        savedResult={savedResult}
         onClose={() => setShowResults(false)}
         onConfidenceChange={setConfidenceThreshold}
         onAddToMap={() => {

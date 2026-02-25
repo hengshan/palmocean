@@ -169,3 +169,33 @@ export async function loadMapConfig(
 export async function healthCheck(): Promise<{ status: string; version: string }> {
   return request('/api/health');
 }
+
+// ── Inference Persist (PalmOcean T2) ─────────────────
+
+export interface PersistInferenceBody {
+  model_slug: string;
+  task_type: string;
+  prompt_type: string;
+  geojson: GeoJSON.FeatureCollection;
+  stats?: Record<string, unknown>;
+  project_id?: string | null;
+  plantation_id?: string | null;
+  inference_time_ms?: number | null;
+  prompt_params?: Record<string, unknown>;
+}
+
+export interface PersistInferenceResult {
+  job_id: string;
+  output_id: string;
+  created_at: string;
+  permalink: string;
+}
+
+export async function persistInferenceResult(
+  body: PersistInferenceBody
+): Promise<PersistInferenceResult> {
+  return request<PersistInferenceResult>('/api/inference/persist', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}

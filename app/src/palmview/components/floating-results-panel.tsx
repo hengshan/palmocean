@@ -26,6 +26,8 @@ export interface FloatingResultsPanelProps {
   job: InferenceJobDetail | null;
   outputs: InferenceOutputItem[];
   confidenceThreshold: number;
+  /** Set once result is saved to PalmOcean — shows the green badge */
+  savedResult?: {outputId: string; permalink: string} | null;
   onClose: () => void;
   onConfidenceChange: (value: number) => void;
   onAddToMap: () => void;
@@ -259,6 +261,7 @@ export const FloatingResultsPanel: React.FC<FloatingResultsPanelProps> = ({
   job,
   outputs,
   confidenceThreshold,
+  savedResult,
   onClose,
   onConfidenceChange,
   onAddToMap,
@@ -376,6 +379,29 @@ export const FloatingResultsPanel: React.FC<FloatingResultsPanelProps> = ({
                 onChange={e => onConfidenceChange(parseFloat(e.target.value))}
               />
             </StyledSliderRow>
+          )}
+
+          {/* PalmOcean saved badge */}
+          {isComplete && (
+            <div style={{
+              marginBottom: 12,
+              padding: '6px 10px',
+              borderRadius: 4,
+              background: savedResult
+                ? 'rgba(46, 204, 113, 0.12)'
+                : 'rgba(255, 255, 255, 0.04)',
+              border: `1px solid ${savedResult ? 'rgba(46,204,113,0.35)' : 'rgba(255,255,255,0.08)'}`,
+              fontSize: 11,
+              color: savedResult ? '#2ecc71' : '#6A7485',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}>
+              {savedResult
+                ? <>✅ 已保存到 PalmOcean<span style={{opacity: 0.6, marginLeft: 4}}>#{savedResult.outputId.slice(0, 8)}</span></>
+                : <>⏳ 正在保存到 PalmOcean...</>
+              }
+            </div>
           )}
 
           {/* Actions */}
