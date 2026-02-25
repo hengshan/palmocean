@@ -45,3 +45,11 @@ meta.json
 .env
 kepler.gl/
 /data
+
+# ML model weights (store in MinIO/S3, not in git)
+ml/weights/
+ml/runs/
+*.pt
+*.pth
+*.bin
+*.onnx
