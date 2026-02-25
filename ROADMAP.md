@@ -36,16 +36,18 @@
 
 ---
 
-## 🔜 Sprint 2（规划中）
+## 🚀 Sprint 2（进行中）
 
-> 等 Hank 确认方向后启动
+**目标：** PalmOcean 数据中台基础 + PalmScene CesiumJS 迁移 + GeoAI 闭环
 
-**候选方向：**
-- [ ] YOLOv8 真实权重接入（替换 mock 推理）
-- [ ] PalmOcean 数字孪生基础架构
-- [ ] 用户认证与多租户
-- [ ] STAC 数据目录集成
-- [ ] 移动端适配（农场技术员场景）
+| 任务 | 负责人 | 状态 |
+|------|--------|------|
+| T1 PalmOcean 后端基础（TimescaleDB + 状态机）| Vega | 🔜 |
+| T2 GeoAI 推理结果持久化到 PalmOcean | Iris + Lyra | 🔜 |
+| T3 PalmScene CesiumJS 主引擎迁移 | Iris | 🔜 |
+| T4 PalmView UI 优化（版权/状态栏/数据入口）| Altair | 🔜 |
+| T5 PalmView → PalmScene 2D/3D 联动 | Altair + Iris | 🔜 |
+| T6 YOLOv8 真实推理接入（替换 mock）| Lyra | 🔜 |
 
 ---
 
