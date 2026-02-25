@@ -4,7 +4,6 @@ After=network.target
 
 [Service]
 Type=simple
-User=hank
 WorkingDirectory=/home/hank/projects/palmview
 Environment=PATH=/home/hank/miniconda3/envs/lntorch/bin:/home/hank/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=CONDA_DEFAULT_ENV=lntorch
@@ -16,4 +15,4 @@ StandardOutput=append:/home/hank/logs/palmview/sam2.log
 StandardError=append:/home/hank/logs/palmview/sam2.log
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

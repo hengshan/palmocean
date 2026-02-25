@@ -1,12 +1,10 @@
 [Unit]
 Description=PalmView DB + MinIO (docker compose)
-After=network.target docker.service
-Requires=docker.service
+After=network.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-User=hank
 WorkingDirectory=/home/hank/projects/palmview
 ExecStart=/usr/bin/docker compose up -d postgres minio
 ExecStop=/usr/bin/docker compose stop postgres minio
@@ -14,4 +12,4 @@ StandardOutput=append:/home/hank/logs/palmview/db.log
 StandardError=append:/home/hank/logs/palmview/db.log
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

@@ -1,37 +1,36 @@
 #!/bin/bash
-# PalmView systemd services installer
+# PalmView systemd user services installer (no sudo needed)
 # Usage: bash deploy/systemd/install.sh
+# On szls: bash ~/projects/palmview/deploy/systemd/install.sh
 
 set -e
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICES=(palmview-db palmview-api palmview-frontend palmview-sam2)
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
 
-echo "📦 Installing PalmView systemd services..."
+echo "📦 Installing PalmView systemd user services..."
+mkdir -p "$SYSTEMD_USER_DIR"
+mkdir -p "$HOME/logs/palmview"
 
-# Create log directory (no sudo needed)
-mkdir -p /home/hank/logs/palmview
-
-# Copy unit files
 for svc in "${SERVICES[@]}"; do
-    echo "  → Installing $svc.service"
-    sudo cp "$DEPLOY_DIR/$svc.service" /etc/systemd/system/
+    cp "$DEPLOY_DIR/$svc.service" "$SYSTEMD_USER_DIR/"
+    echo "  → Installed $svc.service"
 done
 
-# Reload and enable
-sudo systemctl daemon-reload
+systemctl --user daemon-reload
 
 for svc in "${SERVICES[@]}"; do
-    sudo systemctl enable "$svc"
+    systemctl --user enable "$svc"
     echo "  ✅ $svc enabled"
 done
 
 echo ""
 echo "🚀 Start all services:"
-echo "  sudo systemctl start palmview-db"
-echo "  sudo systemctl start palmview-sam2"
-echo "  sudo systemctl start palmview-api"
-echo "  sudo systemctl start palmview-frontend"
+echo "  systemctl --user start palmview-db palmview-sam2 palmview-api palmview-frontend"
 echo ""
 echo "📋 Check status:"
-echo "  sudo systemctl status 'palmview-*'"
+echo "  systemctl --user status 'palmview-*'"
+echo ""
+echo "📌 Auto-start on login (run once):"
+echo "  loginctl enable-linger hank"

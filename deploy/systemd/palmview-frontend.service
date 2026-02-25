@@ -4,7 +4,6 @@ After=network.target
 
 [Service]
 Type=simple
-User=hank
 WorkingDirectory=/home/hank/projects/palmview
 ExecStart=/usr/bin/python3 -m http.server 8080 --bind 0.0.0.0 --directory /home/hank/projects/palmview/app/dist
 Restart=always
@@ -13,4 +12,4 @@ StandardOutput=append:/home/hank/logs/palmview/frontend.log
 StandardError=append:/home/hank/logs/palmview/frontend.log
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

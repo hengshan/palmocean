@@ -5,7 +5,6 @@ Wants=palmview-db.service
 
 [Service]
 Type=simple
-User=hank
 WorkingDirectory=/home/hank/projects/palmview/backend
 Environment=PATH=/home/hank/projects/palmview/backend/.venv/bin:/home/hank/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=GEO_DATABASE_URL=postgresql://palmview:RlICGo8ARMyYFc2FLQva@localhost:5434/palmview
@@ -24,4 +23,4 @@ StandardOutput=append:/home/hank/logs/palmview/api.log
 StandardError=append:/home/hank/logs/palmview/api.log
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
