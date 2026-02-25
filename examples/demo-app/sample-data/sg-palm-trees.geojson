@@ -1,0 +1,20 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {"type":"Feature","properties":{"id":1,"class":"palm_tree","confidence":0.95,"height_m":12},"geometry":{"type":"Point","coordinates":[103.8520,1.2855]}},
+    {"type":"Feature","properties":{"id":2,"class":"palm_tree","confidence":0.91,"height_m":15},"geometry":{"type":"Point","coordinates":[103.8535,1.2860]}},
+    {"type":"Feature","properties":{"id":3,"class":"palm_tree","confidence":0.88,"height_m":18},"geometry":{"type":"Point","coordinates":[103.8512,1.2848]}},
+    {"type":"Feature","properties":{"id":4,"class":"palm_tree","confidence":0.93,"height_m":14},"geometry":{"type":"Point","coordinates":[103.8548,1.2870]}},
+    {"type":"Feature","properties":{"id":5,"class":"palm_tree","confidence":0.87,"height_m":16},"geometry":{"type":"Point","coordinates":[103.8505,1.2840]}},
+    {"type":"Feature","properties":{"id":6,"class":"palm_tree","confidence":0.96,"height_m":11},"geometry":{"type":"Point","coordinates":[103.8560,1.2865]}},
+    {"type":"Feature","properties":{"id":7,"class":"palm_tree","confidence":0.84,"height_m":19},"geometry":{"type":"Point","coordinates":[103.8490,1.2835]}},
+    {"type":"Feature","properties":{"id":8,"class":"palm_tree","confidence":0.92,"height_m":13},"geometry":{"type":"Point","coordinates":[103.8575,1.2880]}},
+    {"type":"Feature","properties":{"id":9,"class":"palm_tree","confidence":0.89,"height_m":17},"geometry":{"type":"Point","coordinates":[103.8528,1.2852]}},
+    {"type":"Feature","properties":{"id":10,"class":"palm_tree","confidence":0.94,"height_m":10},"geometry":{"type":"Point","coordinates":[103.8542,1.2875]}},
+    {"type":"Feature","properties":{"id":11,"class":"palm_tree","confidence":0.90,"height_m":14},"geometry":{"type":"Point","coordinates":[103.8615,1.2920]}},
+    {"type":"Feature","properties":{"id":12,"class":"palm_tree","confidence":0.86,"height_m":16},"geometry":{"type":"Point","coordinates":[103.8630,1.2935]}},
+    {"type":"Feature","properties":{"id":13,"class":"palm_tree","confidence":0.93,"height_m":12},"geometry":{"type":"Point","coordinates":[103.8598,1.2910]}},
+    {"type":"Feature","properties":{"id":14,"class":"palm_tree","confidence":0.88,"height_m":15},"geometry":{"type":"Point","coordinates":[103.8645,1.2945]}},
+    {"type":"Feature","properties":{"id":15,"class":"palm_tree","confidence":0.95,"height_m":18},"geometry":{"type":"Point","coordinates":[103.8580,1.2890]}}
+  ]
+}

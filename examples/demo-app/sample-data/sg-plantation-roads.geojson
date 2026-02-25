@@ -1,0 +1,10 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {"type":"Feature","properties":{"id":1,"name":"Main Harvest Road","type":"primary","width_m":4},"geometry":{"type":"LineString","coordinates":[[103.8480,1.2830],[103.8520,1.2850],[103.8560,1.2870],[103.8600,1.2900],[103.8650,1.2950]]}},
+    {"type":"Feature","properties":{"id":2,"name":"Row Access Path A","type":"secondary","width_m":2.5},"geometry":{"type":"LineString","coordinates":[[103.8520,1.2850],[103.8525,1.2880],[103.8530,1.2910],[103.8535,1.2940]]}},
+    {"type":"Feature","properties":{"id":3,"name":"Row Access Path B","type":"secondary","width_m":2.5},"geometry":{"type":"LineString","coordinates":[[103.8560,1.2870],[103.8565,1.2900],[103.8570,1.2930],[103.8575,1.2960]]}},
+    {"type":"Feature","properties":{"id":4,"name":"Collection Point Road","type":"tertiary","width_m":2},"geometry":{"type":"LineString","coordinates":[[103.8530,1.2910],[103.8550,1.2915],[103.8570,1.2930]]}},
+    {"type":"Feature","properties":{"id":5,"name":"Perimeter Road","type":"primary","width_m":4},"geometry":{"type":"LineString","coordinates":[[103.8480,1.2830],[103.8480,1.2880],[103.8480,1.2930],[103.8480,1.2960],[103.8520,1.2960],[103.8560,1.2960],[103.8600,1.2960],[103.8650,1.2960],[103.8650,1.2950]]}}
+  ]
+}

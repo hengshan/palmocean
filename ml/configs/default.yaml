@@ -1,0 +1,51 @@
+model:
+  encoder:
+    name: prithvi-eo-2.0
+    pretrained: true
+    frozen: true
+    lora_rank: 0
+  decoder:
+    name: transunet  # or swinunet
+    num_classes: 6   # background, building, road, vegetation, water, solar_panel
+    embed_dim: 256
+  text_encoder:
+    enabled: false
+    model_name: "ViT-L-14"
+    pretrained: "openai"
+    remote_clip_weights: null  # path or HF repo for RemoteCLIP weights
+    embed_dim: 768
+    device: "cuda"
+  fusion:
+    enabled: true
+    type: cross_attention  # cross_attention or film
+    num_heads: 8
+
+classes:
+  0: background
+  1: building
+  2: road
+  3: vegetation
+  4: water
+  5: solar_panel
+
+training:
+  batch_size: 8
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  epochs: 50
+  optimizer: adamw
+  scheduler: cosine
+  warmup_epochs: 5
+  val_interval: 1
+  save_best: true
+  early_stopping: 10
+
+data:
+  image_size: 512
+  augmentation: true
+  num_workers: 4
+  pin_memory: true
+  format: simple  # simple | spacenet | inria
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1

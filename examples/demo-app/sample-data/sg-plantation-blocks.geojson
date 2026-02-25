@@ -1,0 +1,11 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {"type":"Feature","properties":{"id":1,"name":"Block A - Mature","age_years":12,"area_ha":5.2,"health":"good","ndvi_mean":0.72},"geometry":{"type":"Polygon","coordinates":[[[103.8480,1.2830],[103.8530,1.2830],[103.8530,1.2880],[103.8480,1.2880],[103.8480,1.2830]]]}},
+    {"type":"Feature","properties":{"id":2,"name":"Block B - Mature","age_years":8,"area_ha":4.8,"health":"excellent","ndvi_mean":0.81},"geometry":{"type":"Polygon","coordinates":[[[103.8530,1.2830],[103.8580,1.2830],[103.8580,1.2880],[103.8530,1.2880],[103.8530,1.2830]]]}},
+    {"type":"Feature","properties":{"id":3,"name":"Block C - Young","age_years":3,"area_ha":6.1,"health":"moderate","ndvi_mean":0.58},"geometry":{"type":"Polygon","coordinates":[[[103.8580,1.2830],[103.8650,1.2830],[103.8650,1.2900],[103.8580,1.2900],[103.8580,1.2830]]]}},
+    {"type":"Feature","properties":{"id":4,"name":"Block D - Replanting","age_years":1,"area_ha":3.5,"health":"new","ndvi_mean":0.35},"geometry":{"type":"Polygon","coordinates":[[[103.8480,1.2880],[103.8530,1.2880],[103.8530,1.2940],[103.8480,1.2940],[103.8480,1.2880]]]}},
+    {"type":"Feature","properties":{"id":5,"name":"Block E - Processing Area","age_years":null,"area_ha":1.2,"health":"n/a","ndvi_mean":null},"geometry":{"type":"Polygon","coordinates":[[[103.8530,1.2880],[103.8570,1.2880],[103.8570,1.2920],[103.8530,1.2920],[103.8530,1.2880]]]}},
+    {"type":"Feature","properties":{"id":6,"name":"Block F - Water Body","age_years":null,"area_ha":0.8,"health":"n/a","ndvi_mean":0.12},"geometry":{"type":"Polygon","coordinates":[[[103.8600,1.2900],[103.8640,1.2900],[103.8640,1.2940],[103.8600,1.2940],[103.8600,1.2900]]]}}
+  ]
+}

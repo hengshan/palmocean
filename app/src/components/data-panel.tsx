@@ -282,6 +282,8 @@ function getCloudCover(props: Record<string, any>): number | null {
 }
 
 function getThumbnail(item: STACSearchItemPersist): string | null {
+  // Check top-level thumbnail field (returned by backend _standardize_item)
+  if (item.thumbnail) return item.thumbnail;
   const thumb = item.assets?.thumbnail?.href || item.assets?.rendered_preview?.href;
   if (thumb) return thumb;
   const link = item.links?.find(l => l.rel === 'preview' || l.rel === 'thumbnail');
@@ -592,37 +594,44 @@ const DataPanelContent = () => {
       let imageUrl: string | undefined;
       let bbox: [number, number, number, number] | undefined = item.bbox as any;
 
-      // 1. Try tile URL from backend
+      // 1. Try tile URL from backend — ONLY if it's a real XYZ tile URL ({z}/{x}/{y} format).
+      //    The backend currently returns raw COG hrefs, not XYZ tiles. Using a COG URL as
+      //    MapLibre tiles silently fails (no error, but no tiles appear) → "Loaded" badge shows
+      //    but the layer is invisible. We skip this until TiTiler is integrated.
       try {
         const res = await fetch(
           `${API_BASE}/api/v1/data/stac/${dt.selectedProvider}/${dt.selectedCollection}/${item.id}/tile-url?asset_key=visual`
         );
         if (res.ok) {
           const data = await res.json();
-          tileUrl = data.tile_url || data.url;
-          if (tileUrl) {
-            console.log('[Data] Map instance:', map.constructor?.name);
+          const candidateUrl: string = data.tile_url || data.url || '';
+          // Only use as tile source if it has XYZ placeholders (real tile URL)
+          if (candidateUrl && (candidateUrl.includes('{z}') || candidateUrl.includes('{x}'))) {
+            tileUrl = candidateUrl;
+            console.log('[Data] XYZ tile URL found:', tileUrl);
             loaded = addRasterToMap(map, layerId, sourceId, { tileUrl });
             if (loaded) console.log('[Data] Raster tile layer added:', layerId);
+          } else if (candidateUrl) {
+            console.log('[Data] tile-url is a COG href (not XYZ) — skipping tile source, will use thumbnail overlay:', candidateUrl.slice(0, 80));
           }
         }
       } catch (e) {
         console.warn('[Data] tile-url attempt failed:', e);
       }
 
-      // 2. Fallback: thumbnail or rendered_preview as image overlay
+      // 2. Image overlay: thumbnail (best for preview) or rendered_preview
       if (!loaded && item.bbox) {
-        const thumbUrl = getThumbnail(item);
-        const cogHref = item.assets?.visual?.href || item.assets?.rendered_preview?.href || thumbUrl;
-        if (cogHref) {
-          imageUrl = cogHref;
-          console.log('[Data] Fallback image overlay:', cogHref, 'bbox:', item.bbox);
-          loaded = addRasterToMap(map, layerId, sourceId, { imageUrl: cogHref, bbox });
+        const thumbUrl = getThumbnail(item);  // checks item.thumbnail, assets.thumbnail, assets.rendered_preview
+        const overlayUrl = thumbUrl || item.assets?.rendered_preview?.href || item.assets?.overview?.href;
+        if (overlayUrl) {
+          imageUrl = overlayUrl;
+          console.log('[Data] Image overlay:', overlayUrl.slice(0, 80), 'bbox:', item.bbox);
+          loaded = addRasterToMap(map, layerId, sourceId, { imageUrl: overlayUrl, bbox });
           if (loaded) console.log('[Data] Image overlay added:', layerId);
         }
       }
 
-      if (!loaded) throw new Error('No tile URL or image asset available');
+      if (!loaded) throw new Error('No displayable asset found (no XYZ tile URL or thumbnail image)');
 
       // 3. Fly to data extent
       if (item.bbox) {

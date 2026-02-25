@@ -1,0 +1,23 @@
+# Predefined prompt templates for common remote sensing classes
+templates:
+  building:
+    - "a building seen from above"
+    - "rooftop of a building in satellite image"
+    - "residential or commercial building"
+  solar_panel:
+    - "solar panels on a rooftop"
+    - "photovoltaic panels seen from above"
+    - "blue or dark solar panel array"
+  road:
+    - "a road or street seen from above"
+    - "paved road in aerial imagery"
+  vegetation:
+    - "trees and green vegetation"
+    - "forest or park area from above"
+  water:
+    - "water body seen from above"
+    - "river, lake, or pond in satellite image"
+
+# Custom prompt engineering hints
+prefix: "a satellite image of"
+suffix: "in a tropical urban environment"

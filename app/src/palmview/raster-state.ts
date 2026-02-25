@@ -39,6 +39,8 @@ export interface STACSearchItemPersist {
   properties: Record<string, any>;
   assets: Record<string, { href: string; type?: string; title?: string }>;
   links?: Array<{ rel: string; href: string }>;
+  /** Top-level thumbnail URL returned by backend _standardize_item */
+  thumbnail?: string;
 }
 
 export interface LoadedLayerInfo {

@@ -1,0 +1,39 @@
+model:
+  encoder:
+    name: resnet34
+    pretrained: true
+    frozen: false
+  decoder:
+    name: transunet
+    num_classes: 2   # background, building
+    embed_dim: 256
+  text_encoder:
+    enabled: false
+  fusion:
+    enabled: false
+
+classes:
+  0: background
+  1: building
+
+training:
+  batch_size: 32
+  learning_rate: 3.0e-4
+  weight_decay: 0.01
+  epochs: 30
+  optimizer: adamw
+  scheduler: cosine
+  warmup_epochs: 3
+  val_interval: 1
+  save_best: true
+  early_stopping: 8
+
+data:
+  image_size: 256
+  augmentation: true
+  num_workers: 4
+  pin_memory: true
+  format: simple
+  train_split: 1.0
+  val_split: 0.0
+  test_split: 0.0
