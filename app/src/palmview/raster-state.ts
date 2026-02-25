@@ -249,17 +249,21 @@ export function removeLoadedLayer(layerId: string): void {
 
 // ── Map Layer Re-add (after style change) ────────────
 
-export function reAddAllLayers(): void {
+export function reAddAllLayers(retryCount = 0): void {
   const map = (window as any).__PALMVIEW_MAP;
   if (!map) return;
 
   const layers = _state.dataTab.loadedLayers;
   if (layers.length === 0) return;
 
-  console.log('[raster-state] Re-adding', layers.length, 'layers after style change');
+  console.log('[raster-state] Re-adding', layers.length, 'layers (attempt', retryCount + 1, ')');
 
-  // Use 'idle' event to wait until the map + react-map-gl have fully settled
-  // (more reliable than a fixed 100ms timeout)
+  // If map style is not yet loaded, wait and retry (max 15 × 100ms = 1.5s)
+  if (!map.isStyleLoaded()) {
+    if (retryCount < 15) setTimeout(() => reAddAllLayers(retryCount + 1), 100);
+    return;
+  }
+
   const doReAdd = () => {
     const firstSymbolId = map.getStyle()?.layers?.find((l: any) => l.type === 'symbol')?.id;
 
@@ -317,12 +321,25 @@ export function reAddAllLayers(): void {
     }
   };
 
-  // Wait 300ms for react-map-gl to finish its layer reconciliation after style.load.
-  // We do NOT use map.once('idle') here because raster/tile sources keep the map
-  // perpetually "non-idle" while tiles are loading — causing re-add to execute
-  // seconds later or never. 300ms is enough for React reconciliation; the
-  // source+layer dual-check below handles any edge-case retry automatically.
-  setTimeout(doReAdd, 300);
+  // Strategy: delay long enough for react-map-gl v7 reconciliation (useEffect batches),
+  // then attempt re-add. Schedule a verification pass 600ms later — if layers are still
+  // missing (Kepler.gl reconciliation ran after us), do one more retry (max 3 total).
+  const delay = retryCount === 0 ? 400 : 200;
+  setTimeout(() => {
+    doReAdd();
+    // Verification pass: schedule a check after another 600ms
+    if (retryCount < 3) {
+      setTimeout(() => {
+        const m = (window as any).__PALMVIEW_MAP;
+        if (!m) return;
+        const missing = layers.some(l => !m.getLayer(l.id) && (l.tileUrl || l.imageUrl || l.geojsonData));
+        if (missing) {
+          console.log('[raster-state] Layers still missing after', delay + 600, 'ms — retrying...');
+          reAddAllLayers(retryCount + 1);
+        }
+      }, 600);
+    }
+  }, delay);
 }
 
 // Setup style.load listener — tracks map instance so listener is re-attached if map changes
