@@ -2,8 +2,11 @@
 // Copyright ©Synga — PalmView Unified Data Entry Tab (T4)
 // Provides a single "Add Data" entry point in the left side-panel.
 
-import React, {useState} from 'react';
+import React, {useMemo, useState} from 'react';
 import styled from 'styled-components';
+import {useDispatch} from 'react-redux';
+import {loadFiles} from '@kepler.gl/actions';
+import ShapefileUploader from './ShapefileUploader';
 
 // ─── Styled Components ───────────────────────────────────────────────────────
 
@@ -141,72 +144,82 @@ interface DataSource {
   body: React.ReactNode;
 }
 
-const DATA_SOURCES: DataSource[] = [
-  {
-    id: 'upload',
-    icon: '📁',
-    title: 'Upload Local File',
-    desc: 'Drag & drop or click to upload local geospatial files',
-    tags: ['GeoJSON', 'Shapefile', 'GeoTIFF', 'CSV', 'LAZ'],
-    body: (
-      <Notice>
-        ℹ️ Use the <strong>Data</strong> tab (satellite icon) to upload local files — it supports
-        CSV, GeoJSON, and GeoTIFF formats directly.
-      </Notice>
-    )
-  },
-  {
-    id: 'cloud',
-    icon: '☁️',
-    title: 'Cloud Assets',
-    desc: 'Connect to internal or external cloud storage and databases',
-    tags: ['MinIO', 'PostGIS', 'S3 Bucket'],
-    body: (
-      <>
-        <Notice>
-          Connect to Synga internal storage (MinIO), PostGIS database, or external S3 buckets.
-        </Notice>
-        <ComingSoon>🚧 Coming in Sprint 3</ComingSoon>
-      </>
-    )
-  },
-  {
-    id: 'satellite',
-    icon: '🛰️',
-    title: 'Satellite & Remote Sensing',
-    desc: 'Search satellite imagery from STAC catalogs or Google Earth Engine',
-    tags: ['STAC Catalog', 'GEE', 'Copernicus', 'Planetary Computer', 'Earth Search'],
-    body: (
-      <Notice>
-        ℹ️ Open the <strong>Data</strong> tab (satellite icon) to search and load STAC/GEE imagery
-        in the current map view.
-      </Notice>
-    )
-  },
-  {
-    id: 'tiles',
-    icon: '🔗',
-    title: 'Tile Services',
-    desc: 'Connect to vector or raster tile services via URL',
-    tags: ['Vector Tiles (MVT)', 'Raster Tiles (XYZ/WMTS)', '3D Tiles', 'PMTiles'],
-    body: (
-      <>
-        <Notice>
-          Enter a tile service URL to stream vector or raster tiles directly onto the map. Supports
-          XYZ, WMTS, PMTiles and 3D Tiles formats.
-        </Notice>
-        <ComingSoon>🚧 Coming in Sprint 3</ComingSoon>
-      </>
-    )
-  }
-];
-
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const AddDataTabContent: React.FC = () => {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const dispatch = useDispatch();
 
   const toggle = (id: string) => setExpanded(prev => (prev === id ? null : id));
+
+  const DATA_SOURCES: DataSource[] = useMemo(
+    () => [
+      {
+        id: 'upload',
+        icon: '📁',
+        title: 'Upload Local File',
+        desc: 'Drag & drop or click to upload local geospatial files',
+        tags: ['GeoJSON', 'Shapefile', 'GeoTIFF', 'CSV', 'LAZ'],
+        body: (
+          <ShapefileUploader
+            onGeoJSON={(geojson, name) => {
+              const geoJsonFile = new File(
+                [JSON.stringify(geojson)],
+                name + '.geojson',
+                {type: 'application/json'}
+              );
+              dispatch(loadFiles([geoJsonFile]));
+            }}
+          />
+        )
+      },
+      {
+        id: 'cloud',
+        icon: '☁️',
+        title: 'Cloud Assets',
+        desc: 'Connect to internal or external cloud storage and databases',
+        tags: ['MinIO', 'PostGIS', 'S3 Bucket'],
+        body: (
+          <>
+            <Notice>
+              Connect to Synga internal storage (MinIO), PostGIS database, or external S3 buckets.
+            </Notice>
+            <ComingSoon>🚧 Coming in Sprint 3</ComingSoon>
+          </>
+        )
+      },
+      {
+        id: 'satellite',
+        icon: '🛰️',
+        title: 'Satellite & Remote Sensing',
+        desc: 'Search satellite imagery from STAC catalogs or Google Earth Engine',
+        tags: ['STAC Catalog', 'GEE', 'Copernicus', 'Planetary Computer', 'Earth Search'],
+        body: (
+          <Notice>
+            ℹ️ Open the <strong>Data</strong> tab (satellite icon) to search and load STAC/GEE
+            imagery in the current map view.
+          </Notice>
+        )
+      },
+      {
+        id: 'tiles',
+        icon: '🔗',
+        title: 'Tile Services',
+        desc: 'Connect to vector or raster tile services via URL',
+        tags: ['Vector Tiles (MVT)', 'Raster Tiles (XYZ/WMTS)', '3D Tiles', 'PMTiles'],
+        body: (
+          <>
+            <Notice>
+              Enter a tile service URL to stream vector or raster tiles directly onto the map.
+              Supports XYZ, WMTS, PMTiles and 3D Tiles formats.
+            </Notice>
+            <ComingSoon>🚧 Coming in Sprint 3</ComingSoon>
+          </>
+        )
+      }
+    ],
+    [dispatch]
+  );
 
   return (
     <PanelWrap>
