@@ -200,9 +200,15 @@ class STACService:
         href = item_data["assets"][asset_key]["href"]
         asset_type = item_data["assets"][asset_key].get("type", "")
 
-        # Build TiTiler COG tile URL
+        # Build TiTiler COG tile URL.
+        # IMPORTANT: URL-encode the COG href so that any embedded query params
+        # (SAS tokens contain ?sv=...&se=...&sig=... characters) are not split by
+        # TiTiler's query parser — without this, the SAS token is truncated and
+        # Planetary Computer returns HTTP 409 (access denied).
+        from urllib.parse import quote as _quote
         titiler_base = os.environ.get("TITILER_BASE_URL", "http://localhost:8003")
-        params = f"url={href}&rescale={rescale}&return_mask=true"
+        encoded_href = _quote(href, safe="")
+        params = f"url={encoded_href}&rescale={rescale}&return_mask=true"
         if bidx:
             params += f"&bidx={bidx}"
         tile_url = f"{titiler_base}/cog/tiles/{{z}}/{{x}}/{{y}}.png?{params}"
