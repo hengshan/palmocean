@@ -61,7 +61,8 @@
     "usehooks-ts": "^3.1.0",
     "three": "^0.183.1",
     "@react-three/fiber": "^9.5.0",
-    "@react-three/drei": "^10.7.7"
+    "@react-three/drei": "^10.7.7",
+    "cesium": "^1.125.0"
   },
   "resolutions": {
     "@luma.gl/core": "8.5.21",
