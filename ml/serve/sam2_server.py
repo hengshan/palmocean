@@ -668,7 +668,7 @@ if __name__ == "__main__":
     port = int(os.environ.get("SAM2_PORT", "8001"))
     logger.info("Starting SAM2 server on port %d …", port)
     uvicorn.run(
-        "ml.serve.sam2_server:app",
+        app,
         host="0.0.0.0",
         port=port,
         reload=False,
