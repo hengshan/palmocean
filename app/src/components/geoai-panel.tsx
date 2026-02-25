@@ -13,6 +13,7 @@ import {
   getMapState,
   subscribe,
   addResultsToKeplerMap,
+  addGeoJSONToKeplerMap,
   getJobOutputs,
   type InferenceJobDetail,
   type InferenceJobSubmit,
@@ -310,6 +311,13 @@ const GeoAiPanelContent = () => {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [aoiState, setAoiState] = useState<AoiState>(getMapState().aoiState);
   const wsRef = useRef<WebSocket | null>(null);
+  // Stable refs for WS callback closures (avoids stale captures)
+  const dispatchRef = useRef(dispatch);
+  useEffect(() => { dispatchRef.current = dispatch; }, [dispatch]);
+  const confidenceRef = useRef(confidenceThreshold);
+  useEffect(() => { confidenceRef.current = confidenceThreshold; }, [confidenceThreshold]);
+  /** Context of the currently-running job (set on submit, used by WS result handler) */
+  const submittedJobRef = useRef<{job_id: string; task_type: string; created_at: string} | null>(null);
 
   // Subscribe to AOI state from raster-state
   useEffect(() => {
@@ -380,6 +388,12 @@ const GeoAiPanelContent = () => {
 
     try {
       const result = await submitInferenceJob(job);
+      const jobCreatedAt = new Date().toISOString();
+      submittedJobRef.current = {
+        job_id: result.job_id,
+        task_type: taskCategory,
+        created_at: jobCreatedAt,
+      };
       setActiveJob({job_id: result.job_id, status: 'queued', progress: 0});
 
       // Connect WebSocket
@@ -390,15 +404,36 @@ const GeoAiPanelContent = () => {
             setActiveJob(prev => prev ? {
               ...prev,
               status: 'running',
-              progress: msg.pct ?? msg.progress ?? prev.progress,
+              progress: msg.pct ?? (msg as any).progress ?? prev.progress,
             } : prev);
+          }
+          if (msg.type === 'result') {
+            // Auto-add results to Kepler map as soon as GeoJSON arrives
+            if (submittedJobRef.current && msg.geojson) {
+              addGeoJSONToKeplerMap(
+                dispatchRef.current,
+                submittedJobRef.current,
+                msg.geojson,
+                {confidenceThreshold: confidenceRef.current}
+              );
+            }
+            // Pre-populate stats for the panel (before API fetch completes)
+            if (msg.stats) {
+              setJobOutputs([{
+                output_id: 'ws-result',
+                output_type: 'geojson',
+                format: 'geojson',
+                uri: '',
+                stats: msg.stats,
+              } as any]);
+            }
           }
           if (msg.type === 'complete') {
             setActiveJob(prev => prev ? {...prev, status: 'complete', progress: 1} : prev);
             setShowResults(true);
-            // Fetch outputs for results panel
+            // Fetch proper outputs from API (for export URI and authoritative stats)
             getJobOutputs(result.job_id).then(res => {
-              setJobOutputs(res.outputs || []);
+              if (res.outputs?.length) setJobOutputs(res.outputs);
             }).catch(() => {});
             loadHistory();
           }

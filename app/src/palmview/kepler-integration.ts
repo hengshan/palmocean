@@ -103,6 +103,57 @@ const TASK_COLORS: Record<string, [number, number, number]> = {
   change_detection: [243, 156, 18], // amber
 };
 
+/** Red → amber → yellow → lime → green, 5-step confidence gradient */
+const CONFIDENCE_COLOR_RANGE = {
+  name: 'Confidence',
+  type: 'sequential' as const,
+  category: 'PalmView',
+  colors: ['#FF4444', '#FF8800', '#FFDD00', '#88CC00', '#00BB44'],
+};
+
+/**
+ * Build a Kepler GeoJSON layer config with confidence-based color mapping.
+ * The layer id is deterministic so re-adding the same job replaces the layer.
+ */
+function buildKeplerLayerConfig(
+  datasetId: string,
+  label: string,
+  taskType: string
+): Record<string, unknown> {
+  const color = TASK_COLORS[taskType] || TASK_COLORS.detection;
+  return {
+    id: `palmview-layer-${datasetId}`,
+    type: 'geojson',
+    config: {
+      dataId: datasetId,
+      label,
+      color,
+      columns: {geojson: '_geojson'},
+      isVisible: true,
+      visConfig: {
+        opacity: 0.8,
+        strokeOpacity: 0.8,
+        strokeWidth: 1,
+        radius: 5,
+        sizeRange: [0, 10],
+        radiusRange: [0, 50],
+        stroked: true,
+        filled: true,
+        enable3d: false,
+        colorRange: CONFIDENCE_COLOR_RANGE,
+      },
+    },
+    visualChannels: {
+      colorField: {name: 'confidence', type: 'real'},
+      colorScale: 'quantize',
+      sizeField: null,
+      sizeScale: 'linear',
+      strokeColorField: null,
+      strokeColorScale: 'quantile',
+    },
+  };
+}
+
 // ── Main Integration Function ────────────────────────
 
 /**
@@ -126,6 +177,7 @@ export async function buildKeplerPayload(
 ): Promise<{
   datasets: ProtoDataset[];
   options: {centerMap: boolean; readOnly: boolean};
+  config: Record<string, unknown>;
 }> {
   // Fetch outputs from backend
   const {outputs} = await getJobOutputs(job.job_id);
@@ -161,11 +213,25 @@ export async function buildKeplerPayload(
     }
   }
 
+  const taskType = (job as any).task_type || 'detection';
+  const layerConfigs = datasets.map(ds =>
+    buildKeplerLayerConfig(ds.info.id, ds.info.label, taskType)
+  );
+
   return {
     datasets,
     options: {
       centerMap: options?.centerMap ?? true,
       readOnly: false,
+    },
+    config: {
+      version: 'v1',
+      config: {
+        visState: {
+          layers: layerConfigs,
+          layerOrder: layerConfigs.map(l => (l as any).id),
+        },
+      },
     },
   };
 }
@@ -218,12 +284,70 @@ export async function addResultsToKeplerMap(
     return;
   }
 
-  // Dispatch Kepler's addDataToMap action
-  // The action type is '@@kepler.gl/ADD_DATA_TO_MAP'
+  // Dispatch Kepler's addDataToMap action with layer config for confidence color mapping
   dispatch({
     type: '@@kepler.gl/ADD_DATA_TO_MAP',
     payload,
   });
 }
 
-export default {buildKeplerPayload, addResultsToKeplerMap};
+// ── Direct GeoJSON → Map (no API round-trip) ─────────
+
+/**
+ * Add a GeoJSON FeatureCollection directly to Kepler map.
+ * Used when results arrive via WebSocket (bypasses extra API fetch).
+ *
+ * Automatically configures a layer with confidence-based color mapping.
+ */
+export function addGeoJSONToKeplerMap(
+  dispatch: (action: any) => void,
+  context: {job_id: string; task_type: string; created_at?: string},
+  geojson: GeoJSON.FeatureCollection,
+  options?: {confidenceThreshold?: number}
+): void {
+  let features = geojson.features || [];
+
+  // Filter by confidence threshold if requested
+  if (options?.confidenceThreshold != null && options.confidenceThreshold > 0) {
+    features = features.filter(
+      f => (f.properties?.confidence ?? 1) >= (options.confidenceThreshold ?? 0)
+    );
+  }
+
+  if (features.length === 0) {
+    console.warn('[PalmView] No features to display (confidence threshold too high?)');
+    return;
+  }
+
+  const filteredGeoJSON: GeoJSON.FeatureCollection = {
+    type: 'FeatureCollection',
+    features,
+  };
+
+  const datasetId = `palmview-${context.job_id.slice(0, 8)}`;
+  const timestamp = new Date(context.created_at || Date.now()).toLocaleDateString();
+  const label = `${context.task_type} · ${features.length} features · ${timestamp}`;
+  const color = TASK_COLORS[context.task_type] || TASK_COLORS.detection;
+
+  const dataset = geojsonToProtoDataset(filteredGeoJSON, datasetId, label, color);
+  const layerConfig = buildKeplerLayerConfig(datasetId, label, context.task_type);
+
+  dispatch({
+    type: '@@kepler.gl/ADD_DATA_TO_MAP',
+    payload: {
+      datasets: [dataset],
+      options: {centerMap: true, readOnly: false},
+      config: {
+        version: 'v1',
+        config: {
+          visState: {
+            layers: [layerConfig],
+            layerOrder: [(layerConfig as any).id],
+          },
+        },
+      },
+    },
+  });
+}
+
+export default {buildKeplerPayload, addResultsToKeplerMap, addGeoJSONToKeplerMap};
