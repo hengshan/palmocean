@@ -125,7 +125,60 @@ const demoReducer = combineReducers({
     visState: {
       loaders: [], // Add additional loaders.gl loaders here
       loadOptions: {} // Add additional loaders.gl loader options here
-    }
+    },
+    // ── Curated basemap list (5 basemaps, no Mapbox proprietary text styles)
+    // Overrides Kepler.gl's default 9-style list.
+    // CARTO styles (open, no token): dark-matter, positron, voyager
+    // Mapbox satellite (token required): pure imagery, no text
+    // Singapore OneMap (public tiles, no auth required for tiles)
+    mapStyle: {
+      styleType: 'dark-matter',
+      mapStyles: {
+        'dark-matter': {
+          id: 'dark-matter',
+          label: 'Dark',
+          url: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+          icon: 'https://studio-public-data.foursquare.com/statics/keplergl/geodude/DARKMATTER.png',
+          layerGroups: [],
+          colorMode: 'DARK',
+          complimentaryStyleId: 'positron',
+        },
+        'positron': {
+          id: 'positron',
+          label: 'Light',
+          url: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+          icon: 'https://studio-public-data.foursquare.com/statics/keplergl/geodude/POSITRON.png',
+          layerGroups: [],
+          colorMode: 'LIGHT',
+          complimentaryStyleId: 'dark-matter',
+        },
+        'voyager': {
+          id: 'voyager',
+          label: 'Street',
+          url: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+          icon: 'https://studio-public-data.foursquare.com/statics/keplergl/geodude/VOYAGER.png',
+          layerGroups: [],
+          colorMode: 'LIGHT',
+          complimentaryStyleId: 'dark-matter',
+        },
+        'satellite': {
+          id: 'satellite',
+          label: 'Satellite',
+          url: 'mapbox://styles/mapbox/satellite-v9',
+          icon: 'https://studio-public-data.foursquare.com/statics/keplergl/geodude/UBER_SATELLITE.png',
+          layerGroups: [],
+          colorMode: 'DARK',
+        },
+        'onemap': {
+          id: 'onemap',
+          label: 'OneMap',
+          url: 'https://www.onemap.gov.sg/maps/json/raster/mbstyle/Default.json',
+          icon: 'https://www.onemap.gov.sg/favicon.ico',
+          layerGroups: [],
+          colorMode: 'LIGHT',
+        },
+      },
+    },
   }),
   app: appReducer,
   aiAssistant: aiAssistantReducer
