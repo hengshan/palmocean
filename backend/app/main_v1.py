@@ -16,6 +16,7 @@ from app.api.v1 import auth as auth_v1
 from app.api.v1 import data_stac
 from app.api.v1 import data_gee
 from app.api.v1 import data as data_v1
+from app.api.v1 import palmocean as palmocean_v1
 from app.api.routes import plantation as plantation_routes
 from app.api.routes import seed3d as seed3d_routes
 from app.api.routes import inference as inference_routes
@@ -61,6 +62,7 @@ app.include_router(data_v1.router)
 app.include_router(plantation_routes.router)
 app.include_router(seed3d_routes.router)
 app.include_router(inference_routes.router, prefix="/api/inference", tags=["inference-persist"])
+app.include_router(palmocean_v1.router, prefix="/api/v1/palmocean", tags=["palmocean"])
 
 
 @app.get("/api/health")
@@ -71,3 +73,10 @@ def health():
 @app.on_event("startup")
 def on_startup():
     init_db()
+    # Initialize PalmOcean TimescaleDB (may not be running locally)
+    try:
+        from app.palmocean_db import init_palmocean_db
+        init_palmocean_db()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"PalmOcean DB init skipped: {e}")

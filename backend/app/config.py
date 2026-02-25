@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     stac_earth_search_url: str = "https://earth-search.aws.element84.com/v1"
     stac_copernicus_url: str = "https://catalogue.dataspace.copernicus.eu/stac"
 
+    # PalmOcean TimescaleDB (IoT / time-series)
+    palmocean_database_url: str = "postgresql://palmocean:RlICGo8ARMyYFc2FLQva@localhost:5435/palmocean"
+
     model_config = {"env_prefix": "GEO_"}
 
 
