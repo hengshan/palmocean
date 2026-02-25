@@ -11,8 +11,16 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["http://localhost:3000", "http://nano.taila366a3.ts.net:3000"]
     
     # Inference API configuration
+    # "local" = local SAM2 server at inference_api_url
+    # "modal" = Modal serverless GPU (uses modal_token_id/secret)
+    inference_backend: str = "local"
     inference_api_url: str = "http://localhost:8001"
-    
+
+    # Modal serverless GPU deployment
+    modal_token_id: str = ""
+    modal_token_secret: str = ""
+    modal_app_name: str = "palmview-inference"
+
     # Redis (optional, for caching)
     redis_url: str | None = None
 

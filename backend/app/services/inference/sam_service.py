@@ -368,11 +368,24 @@ class SAMService:
         self._fallback_backend = MockInferenceBackend()
 
     def _initialize_backend(self) -> InferenceBackend:
-        """Initialize the appropriate backend based on configuration"""
+        """Initialize the appropriate backend based on configuration.
+        
+        Supports three modes via GEO_INFERENCE_BACKEND env:
+          - "local"  → RemoteInferenceBackend pointing at local SAM2 server
+          - "modal"  → RemoteInferenceBackend pointing at Modal deployment URL
+          - "mock"   → MockInferenceBackend (default fallback)
+        """
+        backend_mode = getattr(settings, 'inference_backend', 'local')
         inference_api_url = getattr(settings, 'inference_api_url', None)
         
-        if inference_api_url:
-            logger.info(f"Using RemoteInferenceBackend with URL: {inference_api_url}")
+        if backend_mode == "modal":
+            # Modal deployment: URL comes from modal_app_name
+            modal_app = getattr(settings, 'modal_app_name', 'palmview-inference')
+            modal_url = f"https://{modal_app}--web-app.modal.run"
+            logger.info(f"Using Modal backend: {modal_url}")
+            return RemoteInferenceBackend(modal_url)
+        elif backend_mode == "local" and inference_api_url:
+            logger.info(f"Using local backend: {inference_api_url}")
             return RemoteInferenceBackend(inference_api_url)
         else:
             logger.info("Using MockInferenceBackend")
