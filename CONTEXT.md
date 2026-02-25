@@ -60,6 +60,7 @@ MinIO Object Storage                   port 9000
 
 ## 🔄 最新变更（滚动，保留最近 5 条）
 
+- `2026-02-25` 279b8b7 — PalmScene 3D 组件迁移进 synga/main（three.js + r3f）
 - `2026-02-25` 0866eb5 — ml/weights/ 纳入 DVC 管理（存 MinIO szls:9000）
 - `2026-02-25` 87da7fd — 文档体系重构，synga/ 目录建立，ROADMAP v2
 - `2026-02-25` 0cadbd7 — 分支规范化：synga/main 主干建立，Git 规范文档
