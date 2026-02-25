@@ -181,19 +181,39 @@ class STACService:
         collection: str,
         item_id: str,
         asset_key: str,
+        rescale: str = "0,3000",
+        bidx: str | None = None,
     ) -> dict[str, str]:
-        """Get a COG tile URL for an asset."""
+        """Get a TiTiler XYZ tile URL for a COG asset.
+
+        Returns a tile_url in the form:
+          http://<titiler>/cog/tiles/{z}/{x}/{y}.png?url=<COG_URL>&rescale=0,3000&...
+
+        The frontend detects {z}/{x}/{y} in the URL and renders it as a raster
+        tile source automatically.
+        """
+        import os
         item_data = self.get_item(provider, collection, item_id)
         if asset_key not in item_data["assets"]:
             raise ValueError(f"Asset '{asset_key}' not found. Available: {list(item_data['assets'].keys())}")
 
         href = item_data["assets"][asset_key]["href"]
+        asset_type = item_data["assets"][asset_key].get("type", "")
+
+        # Build TiTiler COG tile URL
+        titiler_base = os.environ.get("TITILER_BASE_URL", "http://localhost:8003")
+        params = f"url={href}&rescale={rescale}&return_mask=true"
+        if bidx:
+            params += f"&bidx={bidx}"
+        tile_url = f"{titiler_base}/cog/tiles/{{z}}/{{x}}/{{y}}.png?{params}"
 
         return {
+            "tile_url": tile_url,
             "url": href,
-            "type": item_data["assets"][asset_key].get("type", ""),
+            "type": asset_type,
             "provider": provider,
-            "note": "Use with a COG-aware tile server (e.g., titiler) or load directly as COG",
+            "titiler_base": titiler_base,
+            "rescale": rescale,
         }
 
 
