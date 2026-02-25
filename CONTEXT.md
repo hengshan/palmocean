@@ -60,10 +60,11 @@ MinIO Object Storage                   port 9000
 
 ## 🔄 最新变更（滚动，保留最近 5 条）
 
-- `2026-02-25` f68ec10 — 排除 ML 模型权重（.gitignore），模型存 MinIO
+- `2026-02-25` 0866eb5 — ml/weights/ 纳入 DVC 管理（存 MinIO szls:9000）
+- `2026-02-25` 87da7fd — 文档体系重构，synga/ 目录建立，ROADMAP v2
+- `2026-02-25` 0cadbd7 — 分支规范化：synga/main 主干建立，Git 规范文档
 - `2026-02-25` 533479cc — GeoJSON 持久化 + WS complete → Kepler 自动渲染
 - `2026-02-25` 2b31bd4 — GeoJSON 路由修复，推理链路完全闭环
-- `2026-02-25` 92380413 — 修复 Add Data modal 自动弹出问题
 
 ---
 
@@ -74,6 +75,7 @@ MinIO Object Storage                   port 9000
 | 产品愿景与角色 | [synga/00-vision/PRODUCT_VISION.md](synga/00-vision/PRODUCT_VISION.md) |
 | 技术架构 | [synga/01-architecture/SYSTEM_ARCHITECTURE.md](synga/01-architecture/SYSTEM_ARCHITECTURE.md) |
 | 数据库设计 | [synga/01-architecture/DATABASE_DESIGN.md](synga/01-architecture/DATABASE_DESIGN.md) |
+| DVC 数据管理 | [synga/01-architecture/DVC_GUIDE.md](synga/01-architecture/DVC_GUIDE.md) |
 | ML 模型 | [synga/02-ml/MODEL_COMPARISON.md](synga/02-ml/MODEL_COMPARISON.md) |
 | 设计规范 | [synga/03-design/DESIGN_SYSTEM.md](synga/03-design/DESIGN_SYSTEM.md) |
 | API 规范 | [synga/04-api/DATA_ACQUISITION_API.md](synga/04-api/DATA_ACQUISITION_API.md) |
