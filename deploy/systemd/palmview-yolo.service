@@ -1,0 +1,20 @@
+[Unit]
+Description=PalmView YOLOv8 Detection Server
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=hank
+WorkingDirectory=/home/hank/projects/palmview
+Environment=YOLO_SERVER_PORT=8002
+Environment=YOLO_WEIGHTS_PATH=/home/hank/projects/palmview/ml/weights/yolov8n.pt
+ExecStart=/home/hank/miniconda3/envs/lntorch/bin/python ml/inference/yolo_server.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=palmview-yolo
+
+[Install]
+WantedBy=multi-user.target

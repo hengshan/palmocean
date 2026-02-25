@@ -11,6 +11,7 @@ from app.schemas.inference import (
 from app.tasks.inference import run_point_inference, run_box_inference, run_auto_inference, run_semantic_inference, run_text_inference
 from app.services.inference.sam_service import sam_service
 from app.services.inference.persist_service import persist_result, get_result, list_results
+from app.services.inference.yolo_service import yolo_service
 
 logger = logging.getLogger(__name__)
 
@@ -205,3 +206,37 @@ async def list_saved_results(
             for d in items
         ],
     )
+
+
+# ── YOLOv8 Detection endpoints ────────────────────────────────────────
+
+@router.get("/detect/health")
+async def yolo_health():
+    """Check YOLOv8 inference server connectivity."""
+    try:
+        return await yolo_service.health_check()
+    except Exception as exc:
+        logger.error("YOLOv8 health check failed: %s", exc)
+        raise HTTPException(status_code=503, detail="YOLOv8 service not reachable.")
+
+
+@router.post("/detect/image")
+async def detect_image(prompt: AutoPrompt):
+    """Run YOLOv8 object detection on a full image."""
+    try:
+        return await yolo_service.detect_image(prompt.image_id)
+    except Exception as exc:
+        _handle_inference_error(exc, "yolo detect image")
+
+
+@router.post("/detect/box")
+async def detect_in_box(prompt: BoxPrompt):
+    """Run YOLOv8 detection within a geographic bounding box."""
+    try:
+        return await yolo_service.detect_bbox(
+            prompt.image_id,
+            prompt.bbox.min_lng, prompt.bbox.min_lat,
+            prompt.bbox.max_lng, prompt.bbox.max_lat,
+        )
+    except Exception as exc:
+        _handle_inference_error(exc, "yolo detect box")
