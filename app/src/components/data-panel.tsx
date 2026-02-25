@@ -673,11 +673,59 @@ const DataPanelContent = () => {
       const imgData = ctx.createImageData(width, height);
 
       if (samplesPerPixel >= 3) {
-        for (let i = 0; i < width * height; i++) {
-          imgData.data[i * 4] = (rasters[0] as any)[i];
-          imgData.data[i * 4 + 1] = (rasters[1] as any)[i];
-          imgData.data[i * 4 + 2] = (rasters[2] as any)[i];
-          imgData.data[i * 4 + 3] = samplesPerPixel >= 4 ? (rasters[3] as any)[i] : 255;
+        const band0 = rasters[0] as any;
+        const band1 = rasters[1] as any;
+        const band2 = rasters[2] as any;
+
+        // Detect UInt16 data (e.g. Sentinel-2 with values 0–10000).
+        // Sample first 5000 pixels to avoid iterating the full image for detection.
+        const sampleLen = Math.min(band0.length, 5000);
+        let maxDetect = 0;
+        for (let i = 0; i < sampleLen; i++) {
+          if (band0[i] > maxDetect) maxDetect = band0[i];
+          if (band1[i] > maxDetect) maxDetect = band1[i];
+          if (band2[i] > maxDetect) maxDetect = band2[i];
+        }
+
+        if (maxDetect > 255) {
+          // ── UInt16 multi-band (Sentinel-2 etc.) ──
+          // Normalize each RGB band independently via min/max stretch (nodata=0 excluded).
+          const normFn = (band: any) => {
+            let bMin = Infinity, bMax = -Infinity;
+            for (let i = 0; i < band.length; i++) {
+              if (band[i] > 0) {
+                if (band[i] < bMin) bMin = band[i];
+                if (band[i] > bMax) bMax = band[i];
+              }
+            }
+            const range = bMax - bMin || 1;
+            return (v: number): number =>
+              v === 0 ? 0 : Math.min(255, Math.max(0, Math.round(((v - bMin) / range) * 255)));
+          };
+          const toR = normFn(band0);
+          const toG = normFn(band1);
+          const toB = normFn(band2);
+          for (let i = 0; i < width * height; i++) {
+            imgData.data[i * 4]     = toR(band0[i]);
+            imgData.data[i * 4 + 1] = toG(band1[i]);
+            imgData.data[i * 4 + 2] = toB(band2[i]);
+            // Transparent only where ALL RGB bands are nodata (0)
+            imgData.data[i * 4 + 3] = (band0[i] === 0 && band1[i] === 0 && band2[i] === 0) ? 0 : 255;
+          }
+        } else {
+          // ── Already UInt8 ──
+          // Only treat band 4 as alpha if it actually looks like a mask (values 0 or 255 only)
+          let band3IsAlpha = false;
+          if (samplesPerPixel >= 4) {
+            const band3 = rasters[3] as any;
+            band3IsAlpha = Array.from(band3 as Uint8Array).every((v: number) => v === 0 || v === 255);
+          }
+          for (let i = 0; i < width * height; i++) {
+            imgData.data[i * 4]     = band0[i];
+            imgData.data[i * 4 + 1] = band1[i];
+            imgData.data[i * 4 + 2] = band2[i];
+            imgData.data[i * 4 + 3] = band3IsAlpha ? (rasters[3] as any)[i] : 255;
+          }
         }
       } else {
         const band = rasters[0] as any;
