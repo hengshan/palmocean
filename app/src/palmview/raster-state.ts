@@ -247,114 +247,169 @@ export function removeLoadedLayer(layerId: string): void {
   _notify();
 }
 
-// ── Map Layer Re-add (after style change) ────────────
+// ── Style Injection (elegant layer persistence) ──────
+//
+// Instead of fighting with style.load timing, we PATCH map.setStyle() directly.
+// Every time Kepler.gl changes the basemap, it calls map.setStyle(styleObject).
+// We intercept this call and INJECT our custom sources/layers into the new style
+// BEFORE MapLibre applies it.  This means our layers are always part of the style —
+// they survive ALL basemap switches without any event listening, timeouts or tile
+// re-fetching (MapLibre reuses cached tiles because the source URL is unchanged).
+//
+// Works for ALL basemap types:  CARTO (HTTPS), Mapbox proprietary (mapbox://), etc.
 
-export function reAddAllLayers(retryCount = 0): void {
-  const map = (window as any).__PALMVIEW_MAP;
-  if (!map) return;
-
+/**
+ * Inject our custom loaded layers into a MapLibre style object.
+ * Returns a shallow-merged style with our sources and layers inserted
+ * before the first symbol layer (so labels/icons render above our tiles).
+ */
+function injectOurLayersIntoStyle(style: any): any {
   const layers = _state.dataTab.loadedLayers;
-  if (layers.length === 0) return;
+  if (layers.length === 0) return style;
+  // Only handle plain style objects — URL strings are handled by MapLibre directly
+  if (!style || typeof style !== 'object') return style;
 
-  console.log('[raster-state] Re-adding', layers.length, 'layers (attempt', retryCount + 1, ')');
+  const ourSources: Record<string, any> = {};
+  const ourLayerSpecs: any[] = [];
 
-  // If map style is not yet loaded, wait and retry (max 15 × 100ms = 1.5s)
-  if (!map.isStyleLoaded()) {
-    if (retryCount < 15) setTimeout(() => reAddAllLayers(retryCount + 1), 100);
-    return;
-  }
-
-  const doReAdd = () => {
-    const firstSymbolId = map.getStyle()?.layers?.find((l: any) => l.type === 'symbol')?.id;
-
-    for (const layer of layers) {
-      try {
-        const sourceExists = !!map.getSource(layer.sourceId);
-        const layerExists = !!map.getLayer(layer.id);
-
-        // Both exist → nothing to do
-        if (sourceExists && layerExists) continue;
-
-        // Source exists but layer is missing → remove stale source first, then re-add both
-        if (sourceExists && !layerExists) {
-          console.warn('[raster-state] Source exists but layer missing, re-adding both:', layer.id);
-          try { map.removeSource(layer.sourceId); } catch (_) {}
-        }
-
-        if (layer.sourceType === 'vector' && layer.geojsonData) {
-          map.addSource(layer.sourceId, { type: 'geojson', data: layer.geojsonData });
-          const geomType = layer.geomType || '';
-          if (geomType.includes('Polygon')) {
-            map.addLayer({ id: layer.id, type: 'fill', source: layer.sourceId, paint: { 'fill-color': '#1FBF6E', 'fill-opacity': layer.opacity ?? 0.4 } }, firstSymbolId);
-            const outlineId = `${layer.id}-outline`;
-            map.addLayer({ id: outlineId, type: 'line', source: layer.sourceId, paint: { 'line-color': '#1FBF6E', 'line-width': 1.5 } }, firstSymbolId);
-          } else if (geomType.includes('Line')) {
-            map.addLayer({ id: layer.id, type: 'line', source: layer.sourceId, paint: { 'line-color': '#1FBF6E', 'line-width': 2, 'line-opacity': layer.opacity ?? 0.85 } }, firstSymbolId);
-          } else {
-            map.addLayer({ id: layer.id, type: 'circle', source: layer.sourceId, paint: { 'circle-radius': 5, 'circle-color': '#1FBF6E', 'circle-opacity': layer.opacity ?? 0.85 } }, firstSymbolId);
-          }
-        } else if (layer.tileUrl) {
-          map.addSource(layer.sourceId, { type: 'raster', tiles: [layer.tileUrl], tileSize: 256 });
-          map.addLayer(
-            { id: layer.id, type: 'raster', source: layer.sourceId, paint: { 'raster-opacity': layer.opacity ?? 0.85 } },
-            firstSymbolId
-          );
-        } else if (layer.imageUrl && layer.bbox) {
-          const [west, south, east, north] = layer.bbox;
-          map.addSource(layer.sourceId, {
-            type: 'image',
-            url: layer.imageUrl,
-            coordinates: [[west, north], [east, north], [east, south], [west, south]],
-          });
-          map.addLayer(
-            { id: layer.id, type: 'raster', source: layer.sourceId, paint: { 'raster-opacity': layer.opacity ?? 0.85 } },
-            firstSymbolId
-          );
-        } else {
-          console.warn('[raster-state] Cannot re-add layer, no URL:', layer.id);
-          continue;
-        }
-        console.log('[raster-state] Re-added layer:', layer.id);
-      } catch (e) {
-        console.warn('[raster-state] Failed to re-add layer:', layer.id, e);
+  for (const layer of layers) {
+    if (layer.tileUrl) {
+      ourSources[layer.sourceId] = { type: 'raster', tiles: [layer.tileUrl], tileSize: 256 };
+      ourLayerSpecs.push({
+        id: layer.id,
+        type: 'raster',
+        source: layer.sourceId,
+        paint: { 'raster-opacity': layer.visible !== false ? (layer.opacity ?? 0.85) : 0 },
+      });
+    } else if (layer.imageUrl && layer.bbox) {
+      const [west, south, east, north] = layer.bbox;
+      ourSources[layer.sourceId] = {
+        type: 'image',
+        url: layer.imageUrl,
+        coordinates: [[west, north], [east, north], [east, south], [west, south]],
+      };
+      ourLayerSpecs.push({
+        id: layer.id,
+        type: 'raster',
+        source: layer.sourceId,
+        paint: { 'raster-opacity': layer.visible !== false ? (layer.opacity ?? 0.85) : 0 },
+      });
+    } else if (layer.geojsonData) {
+      ourSources[layer.sourceId] = { type: 'geojson', data: layer.geojsonData };
+      const geomType = layer.geomType || '';
+      if (geomType.includes('Polygon')) {
+        ourLayerSpecs.push(
+          { id: layer.id, type: 'fill', source: layer.sourceId,
+            paint: { 'fill-color': '#1FBF6E', 'fill-opacity': layer.opacity ?? 0.4 } },
+          { id: (layer.subLayerIds?.[0] ?? `${layer.id}-outline`), type: 'line', source: layer.sourceId,
+            paint: { 'line-color': '#1FBF6E', 'line-width': 1.5 } }
+        );
+      } else if (geomType.includes('Line')) {
+        ourLayerSpecs.push({ id: layer.id, type: 'line', source: layer.sourceId,
+          paint: { 'line-color': '#1FBF6E', 'line-width': 2, 'line-opacity': layer.opacity ?? 0.85 } });
+      } else {
+        ourLayerSpecs.push({ id: layer.id, type: 'circle', source: layer.sourceId,
+          paint: { 'circle-radius': 5, 'circle-color': '#1FBF6E', 'circle-opacity': layer.opacity ?? 0.85 } });
       }
     }
-  };
+  }
 
-  // Strategy: delay long enough for react-map-gl v7 reconciliation (useEffect batches),
-  // then attempt re-add. Schedule a verification pass 600ms later — if layers are still
-  // missing (Kepler.gl reconciliation ran after us), do one more retry (max 3 total).
-  const delay = retryCount === 0 ? 400 : 200;
-  setTimeout(() => {
-    doReAdd();
-    // Verification pass: schedule a check after another 600ms
-    if (retryCount < 3) {
-      setTimeout(() => {
-        const m = (window as any).__PALMVIEW_MAP;
-        if (!m) return;
-        const missing = layers.some(l => !m.getLayer(l.id) && (l.tileUrl || l.imageUrl || l.geojsonData));
-        if (missing) {
-          console.log('[raster-state] Layers still missing after', delay + 600, 'ms — retrying...');
-          reAddAllLayers(retryCount + 1);
-        }
-      }, 600);
-    }
-  }, delay);
+  if (ourLayerSpecs.length === 0) return style;
+
+  // Remove any stale versions of our layers from the style (guard against duplicates on re-injection)
+  const ourLayerIds = new Set(ourLayerSpecs.map((l: any) => l.id));
+  const existingLayers: any[] = (style.layers || []).filter((l: any) => !ourLayerIds.has(l.id));
+
+  // Insert our layers before the first symbol layer so labels render above our tiles
+  const firstSymbolIdx = existingLayers.findIndex((l: any) => l.type === 'symbol');
+  const insertAt = firstSymbolIdx >= 0 ? firstSymbolIdx : existingLayers.length;
+
+  return {
+    ...style,
+    sources: { ...(style.sources || {}), ...ourSources },
+    layers: [
+      ...existingLayers.slice(0, insertAt),
+      ...ourLayerSpecs,
+      ...existingLayers.slice(insertAt),
+    ],
+  };
 }
 
-// Setup style.load listener — tracks map instance so listener is re-attached if map changes
+/** Patch map.setStyle() once per map instance to inject our layers on every basemap switch. */
+let _setStylePatched = false;
+function patchMapSetStyle(map: any): void {
+  if (_setStylePatched) return;
+  _setStylePatched = true;
+  const origSetStyle = map.setStyle.bind(map);
+  map.setStyle = function(style: any, options?: any) {
+    return origSetStyle(injectOurLayersIntoStyle(style), options);
+  };
+  console.log('[raster-state] map.setStyle patched — custom layers will persist across basemap switches');
+}
+
+/**
+ * Attach the setStyle patch (and a style.load fallback) to the current map instance.
+ * Safe to call multiple times — only patches once.
+ */
 let _styleListenerMap: any = null;
 export function attachStyleListener(): void {
   const map = (window as any).__PALMVIEW_MAP;
   if (!map) return;
   if (_styleListenerMap === map) return; // already attached to this instance
   _styleListenerMap = map;
+  // Primary: patch setStyle so our layers are injected into every new style
+  patchMapSetStyle(map);
+  // Fallback: on the very first style.load (initial page load), re-add any layers
+  // that were loaded before attachStyleListener was called
   map.on('style.load', () => {
-    console.log('[raster-state] style.load detected, scheduling layer re-add...');
     reAddAllLayers();
   });
-  console.log('[raster-state] style.load listener attached to map instance');
+  console.log('[raster-state] style listener attached');
 }
+
+/**
+ * Imperatively re-add all loaded layers to the current map.
+ * Used as a fallback for initial page load / edge cases.
+ * With patchMapSetStyle in place, this should rarely be needed.
+ */
+export function reAddAllLayers(): void {
+  const map = (window as any).__PALMVIEW_MAP;
+  if (!map || !map.isStyleLoaded()) return;
+  const layers = _state.dataTab.loadedLayers;
+  if (layers.length === 0) return;
+  const firstSymbolId = map.getStyle()?.layers?.find((l: any) => l.type === 'symbol')?.id;
+  for (const layer of layers) {
+    try {
+      if (map.getLayer(layer.id)) continue; // already present
+      if (map.getSource(layer.sourceId)) {
+        try { map.removeSource(layer.sourceId); } catch (_) {}
+      }
+      if (layer.sourceType === 'vector' && layer.geojsonData) {
+        map.addSource(layer.sourceId, { type: 'geojson', data: layer.geojsonData });
+        const geomType = layer.geomType || '';
+        if (geomType.includes('Polygon')) {
+          map.addLayer({ id: layer.id, type: 'fill', source: layer.sourceId, paint: { 'fill-color': '#1FBF6E', 'fill-opacity': layer.opacity ?? 0.4 } }, firstSymbolId);
+          const outlineId = layer.subLayerIds?.[0] ?? `${layer.id}-outline`;
+          map.addLayer({ id: outlineId, type: 'line', source: layer.sourceId, paint: { 'line-color': '#1FBF6E', 'line-width': 1.5 } }, firstSymbolId);
+        } else if (geomType.includes('Line')) {
+          map.addLayer({ id: layer.id, type: 'line', source: layer.sourceId, paint: { 'line-color': '#1FBF6E', 'line-width': 2, 'line-opacity': layer.opacity ?? 0.85 } }, firstSymbolId);
+        } else {
+          map.addLayer({ id: layer.id, type: 'circle', source: layer.sourceId, paint: { 'circle-radius': 5, 'circle-color': '#1FBF6E', 'circle-opacity': layer.opacity ?? 0.85 } }, firstSymbolId);
+        }
+      } else if (layer.tileUrl) {
+        map.addSource(layer.sourceId, { type: 'raster', tiles: [layer.tileUrl], tileSize: 256 });
+        map.addLayer({ id: layer.id, type: 'raster', source: layer.sourceId, paint: { 'raster-opacity': layer.opacity ?? 0.85 } }, firstSymbolId);
+      } else if (layer.imageUrl && layer.bbox) {
+        const [west, south, east, north] = layer.bbox;
+        map.addSource(layer.sourceId, { type: 'image', url: layer.imageUrl, coordinates: [[west, north], [east, north], [east, south], [west, south]] });
+        map.addLayer({ id: layer.id, type: 'raster', source: layer.sourceId, paint: { 'raster-opacity': layer.opacity ?? 0.85 } }, firstSymbolId);
+      }
+    } catch (e) {
+      console.warn('[raster-state] reAddAllLayers fallback failed for', layer.id, e);
+    }
+  }
+}
+
 
 // ── Raster Layer Actions ─────────────────────────────
 
