@@ -27,7 +27,9 @@ import Announcement, {FormLink} from './components/announcement';
 import {replaceLoadDataModal} from './factories/load-data-modal';
 import {replaceMapControl} from './factories/map-control';
 import {replacePanelHeader} from './factories/panel-header';
+import {replaceLayerList} from './factories/layer-list';
 import {setAoiGeometry, setAoiMode, clearAoi} from './palmview/raster-state';
+import BottomStatusBar from './palmview/components/BottomStatusBar';
 import {CLOUD_PROVIDERS_CONFIGURATION, DEFAULT_FEATURE_FLAGS} from './constants/default-settings';
 import {messages} from './constants/localization';
 
@@ -52,6 +54,7 @@ const KeplerGl = require('@kepler.gl/components').injectComponents([
   replaceLoadDataModal(),
   replaceMapControl(),
   replacePanelHeader(),
+  replaceLayerList(),
   [CustomPanelsFactory, PalmViewCustomPanelsFactory]
 ]);
 
@@ -155,6 +158,7 @@ const StyledVerticalResizeHandle = styled(PanelResizeHandle)`
 
 const App = props => {
   const [showBanner, toggleShowBanner] = useState(false);
+  const [mapboxRef, setMapboxRef] = useState<any>(null);
   const {params: {id, provider} = {}, location: {query = {}} = {}} = props;
   const dispatch = useDispatch();
 
@@ -258,6 +262,7 @@ const App = props => {
     if (mapbox) {
       const map = mapbox.getMap();
       (window as any).__PALMVIEW_MAP = map;
+      setMapboxRef(map);
       console.log('[PalmView] mapbox ref captured, index:', index);
     }
   }, []);
@@ -707,9 +712,12 @@ const App = props => {
                               featureFlags={DEFAULT_FEATURE_FLAGS}
                               onViewStateChange={onViewStateChange}
                               getMapboxRef={handleGetMapboxRef}
+                              customAttribution="©Synga"
                             />
                           )}
                         </AutoSizer>
+                        {/* T4 P0: Bottom Status Bar — coordinates, scale, CRS, zoom */}
+                        <BottomStatusBar mapRef={mapboxRef} />
                       </div>
                     </Panel>
 
