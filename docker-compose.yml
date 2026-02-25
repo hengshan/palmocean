@@ -85,6 +85,7 @@ services:
       GEO_S3_ACCESS_KEY: palmview
       GEO_S3_SECRET_KEY: RlICGo8ARMyYFc2FLQva
       GEO_ALLOWED_ORIGINS: '["http://localhost:8080","http://localhost:3000"]'
+      GEO_INFERENCE_BACKEND: local
       GEO_INFERENCE_API_URL: http://localhost:8001
     volumes:
       - ./backend:/app
