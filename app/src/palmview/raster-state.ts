@@ -317,15 +317,12 @@ export function reAddAllLayers(): void {
     }
   };
 
-  // Wait for map to be fully idle (react-map-gl has re-added its own layers),
-  // then re-add our custom raster/image layers on top.
-  if (map.isStyleLoaded()) {
-    // Style already settled — use idle to let react-map-gl finish its reconciliation
-    map.once('idle', doReAdd);
-  } else {
-    // Fallback: style not yet loaded, retry after a short delay
-    setTimeout(doReAdd, 300);
-  }
+  // Wait 300ms for react-map-gl to finish its layer reconciliation after style.load.
+  // We do NOT use map.once('idle') here because raster/tile sources keep the map
+  // perpetually "non-idle" while tiles are loading — causing re-add to execute
+  // seconds later or never. 300ms is enough for React reconciliation; the
+  // source+layer dual-check below handles any edge-case retry automatically.
+  setTimeout(doReAdd, 300);
 }
 
 // Setup style.load listener — tracks map instance so listener is re-attached if map changes
