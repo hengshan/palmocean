@@ -79,3 +79,34 @@
 ---
 
 *版本：v1.0 | 2026-02-25 | Lyra 制定*
+
+---
+
+## Cursor Cloud specific instructions
+
+### Services overview
+
+| Service | Port | How to start |
+|---------|------|-------------|
+| **Frontend** (kepler.gl + GeoAI) | 8080 | `cd app && NODE_ENV=local node esbuild.config.mjs --start` |
+| **Backend** (FastAPI) | 8000 | `cd backend && source .venv/bin/activate && uvicorn app.main_v1:app --host 0.0.0.0 --port 8000 --reload` |
+| **PostgreSQL + PostGIS** | 5434 | `sudo docker compose -f docker-compose.infra.yml up -d` |
+| **MinIO** | 9000/9001 | Started with docker-compose above |
+
+### Gotchas
+
+- **Node version**: Despite `.nvmrc` saying 18.18.2, the esbuild config (`app/esbuild.config.mjs`) uses `import ... with {type: 'json'}` which requires **Node >= 20**. Use `nvm use 20` for the frontend.
+- **Yarn version**: Must be **4.4.0** (Berry). Enable via `corepack enable && corepack prepare yarn@4.4.0 --activate`.
+- **Alembic migrations** have a table ordering bug in `465b89dd9e71_initial_schema.py`. For fresh dev DBs, use `python -c "from app.database import init_db; init_db()"` instead.
+- **Auth columns**: The `users` table created by `init_db()` is missing `id`, `username`, `password_hash`, `role`, `is_active` columns needed by `app/services/auth.py`. Add them with ALTER TABLE (see setup session for exact SQL).
+- **Inference backend**: Set `GEO_INFERENCE_BACKEND=mock` in `backend/.env` when no GPU is available (no SAM2/YOLO servers).
+- **Mapbox token**: Frontend needs `MapboxAccessToken` in `app/.env` for map tiles. Without it, the app loads but map background is blank.
+- **Docker**: Required for PostgreSQL+PostGIS and MinIO. Start Docker daemon with `sudo dockerd &` if not already running, then `sudo docker compose -f docker-compose.infra.yml up -d`.
+- **MinIO bucket**: After first start, create the assets bucket: `sudo docker exec palmview-minio mc alias set local http://localhost:9000 palmview RlICGo8ARMyYFc2FLQva && sudo docker exec palmview-minio mc mb --ignore-existing local/palmview-assets`.
+
+### Lint & Test
+
+- **Frontend lint**: `yarn typescript` (TS check) and `yarn lint` (ESLint). Note: `@types/three` causes TS errors due to version mismatch with TS 4.7 — pre-existing, not a blocker.
+- **Frontend tests**: `yarn test-jest` (13 suites, 135 tests).
+- **Backend lint**: `cd backend && source .venv/bin/activate && ruff check app/` (54 pre-existing warnings).
+- **Backend tests**: No automated tests exist yet.
