@@ -101,6 +101,7 @@
 - **Auth columns**: The `users` table created by `init_db()` is missing `id`, `username`, `password_hash`, `role`, `is_active` columns needed by `app/services/auth.py`. Add them with ALTER TABLE (see setup session for exact SQL).
 - **Inference backend**: Set `GEO_INFERENCE_BACKEND=mock` in `backend/.env` when no GPU is available (no SAM2/YOLO servers).
 - **Mapbox token**: Frontend needs a **public** token (`pk.xxx`) as `MapboxAccessToken` in `app/.env` for map tiles. Secret tokens (`sk.xxx`) will NOT work for browser map rendering. Without a valid public token, the app loads and all panels work but the map background is blank.
+- **WebGL in Cloud VM**: The cloud VM has no GPU, so deck.gl/MapLibre GL map tile rendering fails silently (red toast: "An error in deck.gl: Failed to create"). All panels and UI components remain fully functional — only the map canvas is blank. This is expected and not a code issue.
 - **Docker**: Required for PostgreSQL+PostGIS and MinIO. Start Docker daemon with `sudo dockerd &` if not already running, then `sudo docker compose -f docker-compose.infra.yml up -d`.
 - **MinIO bucket**: After first start, create the assets bucket: `sudo docker exec palmview-minio mc alias set local http://localhost:9000 palmview RlICGo8ARMyYFc2FLQva && sudo docker exec palmview-minio mc mb --ignore-existing local/palmview-assets`.
 
