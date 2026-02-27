@@ -7,6 +7,7 @@ import {LOADING_METHODS} from '../constants/default-settings';
 import SampleMapGallery from '../components/load-data-modal/sample-data-viewer';
 import LoadRemoteMap from '../components/load-data-modal/load-remote-map';
 import SampleMapsTab from '../components/load-data-modal/sample-maps-tab';
+import LoadCogPanel from '../components/load-data-modal/load-cog-panel';
 import {loadRemoteMap, loadSample, loadSampleConfigurations} from '../actions';
 
 // Register app-specific loading methods into the Registry.
@@ -23,6 +24,13 @@ registerLoadingMethod({
   label: 'modal.loadData.sample',
   elementType: SampleMapGallery,
   tabElementType: SampleMapsTab
+});
+
+registerLoadingMethod({
+  id: 'cog',
+  label: 'COG / Raster',
+  icon: '🛰️',
+  elementType: LoadCogPanel
 });
 
 const CustomLoadDataModalFactory = (...deps) => {
