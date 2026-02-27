@@ -8,52 +8,73 @@ import {media} from '@kepler.gl/styles';
 import {FormattedMessage, useIntl} from 'react-intl';
 import {LoadingMethod} from './load-data-modal';
 
+// ─── Styled Components ───────────────────────────────────────────────────────
+
+/** Container row — no full-width underline */
 const ModalTab = styled.div`
-  align-items: flex-end;
   display: flex;
-  border-bottom: 1px solid #d8d8d8;
-  margin-bottom: 32px;
-  justify-content: space-between;
-
-  .load-data-modal__tab__inner {
-    display: flex;
-    width: 100%;
-  }
-
-  .load-data-modal__tab__item.active {
-    color: ${props => props.theme.textColorLT};
-    border-bottom: 3px solid ${props => props.theme.textColorLT};
-    font-weight: 500;
-  }
+  flex-direction: row;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 
   ${media.portable`
-    font-size: 12px;
+    gap: 4px;
   `};
 `;
 
+/** Card-style tab pill */
 const StyledLoadDataModalTabItem = styled.div`
-  border-bottom: 3px solid transparent;
+  width: 80px;
+  height: 64px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 2px solid transparent;
   cursor: pointer;
-  margin-left: 32px;
-  padding: 16px 0;
-  font-size: 14px;
-  font-weight: 400;
-  color: ${props => props.theme.subtextColorLT};
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: transparent;
+  transition: background 0.15s, border-bottom-color 0.15s;
+  color: ${props => props.theme.subtextColor || 'rgba(255,255,255,0.5)'};
+
+  &.active {
+    background: rgba(255, 255, 255, 0.08);
+    border-bottom-color: ${props =>
+      (props.theme as {activeColor?: string}).activeColor || '#00c4b0'};
+    color: ${props => props.theme.textColorHl || '#fff'};
+  }
+
+  &:hover:not(.active) {
+    background: rgba(255, 255, 255, 0.04);
+    color: ${props => props.theme.textColor || 'rgba(255,255,255,0.8)'};
+  }
 
   ${media.portable`
-    margin-left: 16px;
-    font-size: 12px;
+    width: 64px;
+    height: 54px;
   `};
-
-  :first-child {
-    margin-left: 0;
-    padding-left: 0;
-  }
-
-  &:hover {
-    color: ${props => props.theme.textColorLT};
-  }
 `;
+
+const TabIcon = styled.span`
+  font-size: 20px;
+  line-height: 1;
+`;
+
+const TabLabel = styled.span`
+  font-size: 11px;
+  font-weight: 400;
+  text-align: center;
+  line-height: 1.2;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
 
 const noop = () => {
   return;
@@ -70,6 +91,7 @@ interface ModalTabProps {
   toggleMethod: (method: LoadingMethod) => void;
   currentMethod?: string;
 }
+
 export const ModalTabItem: React.FC<ModalTabItemProps> = ({
   currentMethod,
   method,
@@ -78,19 +100,26 @@ export const ModalTabItem: React.FC<ModalTabItemProps> = ({
   const onClick = useCallback(() => toggleMethod(method), [method, toggleMethod]);
   const intl = useIntl();
 
-  return method.tabElementType ? (
-    <method.tabElementType onClick={onClick} intl={intl} />
-  ) : (
+  if (method.tabElementType) {
+    return <method.tabElementType onClick={onClick} intl={intl} />;
+  }
+
+  const isActive = !!(currentMethod && method.id === currentMethod);
+
+  return (
     <StyledLoadDataModalTabItem
-      className={classnames('load-data-modal__tab__item', {
-        active: currentMethod && method.id === currentMethod
-      })}
+      className={classnames('load-data-modal__tab__item', {active: isActive})}
       onClick={onClick}
     >
-      <div>{method.label ? <FormattedMessage id={method.label} /> : method.id}</div>
+      {method.icon && <TabIcon>{method.icon}</TabIcon>}
+      <TabLabel>
+        {method.label ? <FormattedMessage id={method.label} /> : method.id}
+      </TabLabel>
     </StyledLoadDataModalTabItem>
   );
 };
+
+// ─── Factory ─────────────────────────────────────────────────────────────────
 
 function ModalTabsFactory() {
   const ModalTabs: React.FC<ModalTabProps> = ({
@@ -99,16 +128,14 @@ function ModalTabsFactory() {
     loadingMethods = []
   }) => (
     <ModalTab className="load-data-modal__tab">
-      <div className="load-data-modal__tab__inner">
-        {loadingMethods.map(method => (
-          <ModalTabItem
-            key={method.id}
-            method={method}
-            currentMethod={currentMethod}
-            toggleMethod={toggleMethod}
-          />
-        ))}
-      </div>
+      {loadingMethods.map(method => (
+        <ModalTabItem
+          key={method.id}
+          method={method}
+          currentMethod={currentMethod}
+          toggleMethod={toggleMethod}
+        />
+      ))}
     </ModalTab>
   );
 

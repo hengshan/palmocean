@@ -186,7 +186,7 @@ export {default as ExportImageModalFactory} from './modals/export-image-modal';
 export {default as ExportHtmlMapFactory} from './modals/export-map-modal/export-html-map';
 export {default as ExportJsonMapFactory} from './modals/export-map-modal/export-json-map';
 export {default as ExportMapModalFactory} from './modals/export-map-modal/export-map-modal';
-export {default as LoadDataModalFactory} from './modals/load-data-modal';
+export {default as LoadDataModalFactory, registerLoadingMethod} from './modals/load-data-modal';
 export {default as LoadTileSetFactory} from './modals/tilesets-modals/load-tileset';
 export {default as LoadStorageMapFactory} from './modals/load-storage-map';
 export {default as ModalDialogFactory} from './modals/modal-dialog';
