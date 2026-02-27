@@ -19,7 +19,7 @@ const Bar = styled.div`
   position: absolute;
   bottom: 0;
   left: 0;
-  right: 0;
+  width: fit-content;
   height: 22px;
   background: rgba(18, 22, 28, 0.88);
   backdrop-filter: blur(4px);
