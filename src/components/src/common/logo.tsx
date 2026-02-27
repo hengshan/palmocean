@@ -3,7 +3,10 @@
 
 import React from 'react';
 import styled from 'styled-components';
-import {KEPLER_GL_NAME, KEPLER_GL_VERSION, KEPLER_GL_WEBSITE} from '@kepler.gl/constants';
+import {KEPLER_GL_VERSION} from '@kepler.gl/constants';
+
+const SYNGA_NAME = 'Synga';
+const SYNGA_WEBSITE = 'https://synga.ai';
 
 const LogoTitle = styled.div`
   display: inline-block;
@@ -35,11 +38,9 @@ const LogoSvgWrapper = styled.div`
 `;
 
 const LogoSvg = () => (
-  <svg className="side-panel-logo__logo" width="22px" height="15px" viewBox="0 0 22 15">
-    <g transform="translate(11, -3) rotate(45.000000)">
-      <rect fill="#535C6C" x="0" y="5" width="10" height="10" />
-      <rect fill="#1FBAD6" x="5" y="0" width="10" height="10" />
-    </g>
+  <svg className="side-panel-logo__logo" width="18px" height="18px" viewBox="0 0 18 18">
+    {/* Synga star mark — four-pointed diamond */}
+    <polygon points="9,1 11.5,7.5 18,9 11.5,10.5 9,17 6.5,10.5 0,9 6.5,7.5" fill="#00c4b0" />
   </svg>
 );
 interface KeplerGlLogoProps {
@@ -49,8 +50,8 @@ interface KeplerGlLogoProps {
 }
 
 const KeplerGlLogo = ({
-  appName = KEPLER_GL_NAME,
-  appWebsite = KEPLER_GL_WEBSITE,
+  appName = SYNGA_NAME,
+  appWebsite = SYNGA_WEBSITE,
   version = KEPLER_GL_VERSION
 }: KeplerGlLogoProps) => (
   <LogoWrapper className="side-panel-logo">

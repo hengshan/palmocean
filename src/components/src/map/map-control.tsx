@@ -37,7 +37,7 @@ const StyledMapControl = styled.div<StyledMapControlProps>`
   }
 `;
 
-const LegendLogo = <KeplerGlLogo version={false} appName="kepler.gl" />;
+const LegendLogo = <KeplerGlLogo version={false} appName="Synga" appWebsite="https://synga.ai" />;
 
 export type MapControlProps = {
   datasets: Datasets;
