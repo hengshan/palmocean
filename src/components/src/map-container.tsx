@@ -283,8 +283,8 @@ export const Attribution: React.FC<AttributionProps> = ({
           <div className="attrition-link">
             {datasetAttributions?.length ? <span className="pipe-separator">|</span> : null}
             {isPalm ? <MapLibLogo baseMapLibraryConfig={baseMapLibraryConfig} /> : null}
-            <a href="https://kepler.gl/policy/" target="_blank" rel="noopener noreferrer">
-              © kepler.gl |{' '}
+            <a href="https://synga.ai" target="_blank" rel="noopener noreferrer">
+              © Synga |{' '}
             </a>
             {!isPalm ? <MapLibLogo baseMapLibraryConfig={baseMapLibraryConfig} /> : null}
           </div>
