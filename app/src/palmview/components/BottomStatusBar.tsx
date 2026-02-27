@@ -2,14 +2,13 @@
 // Copyright ©Synga — PalmView Bottom Status Bar
 // Displays real-time mouse coordinates, scale, CRS and zoom level.
 
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import styled from 'styled-components';
 import {useSelector} from 'react-redux';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface BottomStatusBarProps {
-  /** Mapbox GL JS Map instance (from window.__PALMVIEW_MAP or passed directly) */
   mapRef?: any;
 }
 
@@ -29,7 +28,7 @@ const Bar = styled.div`
   display: flex;
   align-items: center;
   padding: 0 10px;
-  z-index: 900; /* above map, below modals */
+  z-index: 900;
   pointer-events: none;
   user-select: none;
   white-space: nowrap;
@@ -41,12 +40,8 @@ const Seg = styled.span`
   padding: 0 10px;
   border-right: 1px solid rgba(255, 255, 255, 0.1);
   line-height: 1;
-  &:first-child {
-    padding-left: 0;
-  }
-  &:last-child {
-    border-right: none;
-  }
+  &:first-child { padding-left: 0; }
+  &:last-child  { border-right: none; }
 `;
 
 const Label = styled.span`
@@ -61,43 +56,75 @@ const Value = styled.span`
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatScale(zoom: number): string {
-  // Approximate: scale = 559082264 / 2^zoom (metres per pixel × 96 DPI)
   const scale = 559082264 / Math.pow(2, zoom);
   if (scale >= 1_000_000) return `1:${(scale / 1_000_000).toFixed(1)}M`;
   if (scale >= 1_000) return `1:${Math.round(scale / 1000)}k`;
   return `1:${Math.round(scale)}`;
 }
 
-function formatCoord(value: number, posLabel: string, negLabel: string): string {
-  return `${Math.abs(value).toFixed(4)}°${value >= 0 ? posLabel : negLabel}`;
+function formatCoord(value: number, pos: string, neg: string): string {
+  return `${Math.abs(value).toFixed(4)}°${value >= 0 ? pos : neg}`;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const BottomStatusBar: React.FC<BottomStatusBarProps> = ({mapRef}) => {
   const [coords, setCoords] = useState<{lng: number; lat: number} | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
-  // Zoom from Kepler.gl Redux store (mapState.zoom)
   const zoom: number = useSelector(
     (state: any) => state?.demo?.keplerGl?.map?.mapState?.zoom ?? 0
   );
 
-  const handleMouseMove = useCallback((e: any) => {
-    if (e?.lngLat) {
-      setCoords({lng: e.lngLat.lng, lat: e.lngLat.lat});
-    }
-  }, []);
-
   useEffect(() => {
-    // Prefer the passed mapRef; fall back to window.__PALMVIEW_MAP
-    const map = mapRef || (typeof window !== 'undefined' ? (window as any).__PALMVIEW_MAP : null);
-    if (!map) return;
+    // Clean up any previous listener
+    cleanupRef.current?.();
+    cleanupRef.current = null;
 
-    map.on('mousemove', handleMouseMove);
-    return () => {
-      map.off('mousemove', handleMouseMove);
+    const attach = (map: any) => {
+      const container: HTMLElement | null = map.getContainer?.();
+      if (!container) return;
+
+      const onMove = (e: MouseEvent) => {
+        const rect = container.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        try {
+          const ll = map.unproject([x, y]);
+          setCoords({lng: ll.lng, lat: ll.lat});
+        } catch {
+          // map not ready yet
+        }
+      };
+
+      container.addEventListener('mousemove', onMove);
+      cleanupRef.current = () => container.removeEventListener('mousemove', onMove);
     };
-  }, [mapRef, handleMouseMove]);
+
+    // If mapRef is already available, use it immediately
+    const immediate = mapRef || (window as any).__PALMVIEW_MAP;
+    if (immediate) {
+      attach(immediate);
+      return;
+    }
+
+    // Otherwise poll until window.__PALMVIEW_MAP is set (max 10s)
+    let attempts = 0;
+    const timer = setInterval(() => {
+      const map = (window as any).__PALMVIEW_MAP;
+      if (map) {
+        clearInterval(timer);
+        attach(map);
+      } else if (++attempts > 100) {
+        clearInterval(timer);
+      }
+    }, 100);
+
+    return () => {
+      clearInterval(timer);
+      cleanupRef.current?.();
+    };
+  }, [mapRef]);
 
   const latStr = coords ? formatCoord(coords.lat, 'N', 'S') : '—';
   const lngStr = coords ? formatCoord(coords.lng, 'E', 'W') : '—';
@@ -106,9 +133,7 @@ const BottomStatusBar: React.FC<BottomStatusBarProps> = ({mapRef}) => {
     <Bar>
       <Seg>
         <Label>坐标:</Label>
-        <Value>
-          {latStr}, {lngStr}
-        </Value>
+        <Value>{latStr}, {lngStr}</Value>
       </Seg>
       <Seg>
         <Label>Scale:</Label>
