@@ -28,6 +28,9 @@ class ImageryAssetDetailV1(BaseModel):
     crs: str
     bands: dict | None = None
     size_bytes: int | None = None
+    acquired_at: datetime | None = None
+    tile_endpoint: str | None = None
+    props: dict | None = None
     created_at: datetime | None = None
     model_config = {"from_attributes": True}
 

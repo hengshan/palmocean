@@ -13,6 +13,66 @@ import {Button} from '@kepler.gl/components';
 const DEFAULT_TITILER_BASE_URL = 'http://szls.taila366a3.ts.net:8003';
 const DEFAULT_RESCALE = '0,3000';
 
+// Band presets for common satellite imagery types
+// Params are appended to the TiTiler tile URL
+interface BandPreset {
+  id: string;
+  label: string;
+  description: string;
+  /** Extra query params appended to tile URL (e.g. bidx, expression, colormap_name) */
+  params: Record<string, string>;
+  /** Suggested rescale override (empty = use current rescale) */
+  rescaleOverride?: string;
+}
+
+const BAND_PRESETS: BandPreset[] = [
+  {
+    id: 'none',
+    label: 'Default (no preset)',
+    description: 'Use file as-is with current rescale range',
+    params: {}
+  },
+  {
+    id: 'rgb',
+    label: '🌈 RGB True Color',
+    description: 'Bands 4-3-2 (Red/Green/Blue) — natural colour',
+    params: {bidx: '4,3,2'},
+    rescaleOverride: '0,3000'
+  },
+  {
+    id: 'cir',
+    label: '🌿 CIR False Color',
+    description: 'Bands 8-4-3 (NIR/Red/Green) — vegetation highlights',
+    params: {bidx: '8,4,3'},
+    rescaleOverride: '0,5000'
+  },
+  {
+    id: 'agriculture',
+    label: '🌾 Agriculture',
+    description: 'Bands 11-8-2 (SWIR/NIR/Blue) — crop stress detection',
+    params: {bidx: '11,8,2'},
+    rescaleOverride: '0,5000'
+  },
+  {
+    id: 'ndvi',
+    label: '📊 NDVI (vegetation index)',
+    description: 'Expression (B8−B4)/(B8+B4) — green = healthy vegetation',
+    params: {
+      expression: '(b8-b4)/(b8+b4)',
+      colormap_name: 'rdylgn',
+      rescale: '-1,1'
+    },
+    rescaleOverride: '-1,1'
+  },
+  {
+    id: 'single',
+    label: '⬜ Single Band',
+    description: 'Band 1 only — grayscale elevation / thermal / etc.',
+    params: {bidx: '1', colormap_name: 'greys'},
+    rescaleOverride: '0,10000'
+  }
+];
+
 // ─── Styled Components ───────────────────────────────────────────────────────
 
 const StyledDescription = styled.div`
@@ -28,7 +88,7 @@ const InputForm = styled.div`
   background-color: ${props => props.theme.panelBackgroundLT};
 `;
 
-const StyledInput = styled.input`
+const StyledInput = styled.input<{error?: boolean | string}>`
   width: 100%;
   padding: ${props => props.theme.inputPadding};
   color: ${props => (props.error ? 'red' : props.theme.titleColorLT)};
@@ -44,6 +104,19 @@ const StyledInput = styled.input`
   &.active {
     outline: 0;
   }
+`;
+
+const StyledSelect = styled.select`
+  width: 100%;
+  padding: ${props => props.theme.inputPadding};
+  color: ${props => props.theme.titleColorLT};
+  height: ${props => props.theme.inputBoxHeight};
+  border: 0;
+  outline: 0;
+  font-size: ${props => props.theme.inputFontSize};
+  background-color: ${props => props.theme.inputBgdColor || props.theme.panelBackgroundLT};
+  margin-bottom: 8px;
+  cursor: pointer;
 `;
 
 const StyledFromGroup = styled.div`
@@ -71,11 +144,24 @@ const StyledSuccess = styled.div`
   margin-top: 8px;
 `;
 
+const PresetDescription = styled.div`
+  font-size: 11px;
+  color: ${props => props.theme.subtextColorLT};
+  margin-bottom: 12px;
+  font-style: italic;
+`;
+
 const ExampleUrl = styled.div`
   font-size: 11px;
   color: ${props => props.theme.subtextColorLT};
   margin-top: 4px;
   word-break: break-all;
+`;
+
+const Divider = styled.hr`
+  border: none;
+  border-top: 1px solid ${props => props.theme.borderColorLT || '#e0e0e0'};
+  margin: 16px 0;
 `;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -97,6 +183,42 @@ interface CogInfo {
   colorinterp?: string[];
   width?: number;
   height?: number;
+  count?: number;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function buildTileUrl(
+  titilerBaseUrl: string,
+  cogUrl: string,
+  rescale: string,
+  preset: BandPreset
+): string {
+  const base = `${titilerBaseUrl}/cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png`;
+  const params = new URLSearchParams({url: cogUrl});
+
+  // Apply preset params (bidx, expression, colormap_name, rescale override)
+  for (const [k, v] of Object.entries(preset.params)) {
+    if (k === 'rescale') {
+      // rescale in params takes priority over UI rescale for this preset
+      params.set('rescale', v);
+    } else if (k === 'bidx') {
+      // bidx values must be repeated params: ?bidx=4&bidx=3&bidx=2
+      params.delete('bidx');
+      for (const b of v.split(',')) {
+        params.append('bidx', b.trim());
+      }
+    } else {
+      params.set(k, v);
+    }
+  }
+
+  // Fallback rescale (if not set by preset)
+  if (!preset.params['rescale']) {
+    params.set('rescale', preset.rescaleOverride || rescale);
+  }
+
+  return `${base}?${params.toString()}`;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -105,13 +227,37 @@ const LoadCogPanel: React.FC<LoadCogPanelProps> = ({onTilesetAdded}) => {
   const [cogUrl, setCogUrl] = useState('');
   const [titilerBaseUrl, setTitilerBaseUrl] = useState(DEFAULT_TITILER_BASE_URL);
   const [rescale, setRescale] = useState(DEFAULT_RESCALE);
+  const [selectedPresetId, setSelectedPresetId] = useState('none');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [cogInfo, setCogInfo] = useState<CogInfo | null>(null);
 
+  const selectedPreset = BAND_PRESETS.find(p => p.id === selectedPresetId) ?? BAND_PRESETS[0];
+
   // Validate COG URL
   const cogUrlValid = cogUrl && validateUrl(cogUrl);
   const titilerUrlValid = titilerBaseUrl && validateUrl(titilerBaseUrl);
+
+  // Auto-select preset based on band count when COG info loads
+  useEffect(() => {
+    if (!cogInfo) return;
+    const count = cogInfo.count ?? (cogInfo.band_metadata?.length || 0);
+    if (count === 1 && selectedPresetId === 'none') {
+      setSelectedPresetId('single');
+    } else if (count >= 8 && selectedPresetId === 'none') {
+      // Multi-band satellite: default to RGB
+      setSelectedPresetId('rgb');
+    } else if (count === 3 && selectedPresetId === 'none') {
+      // 3-band: already RGB, keep default
+    }
+  }, [cogInfo, selectedPresetId]);
+
+  // Sync rescale field with preset override
+  useEffect(() => {
+    if (selectedPreset.rescaleOverride && selectedPreset.id !== 'none') {
+      setRescale(selectedPreset.rescaleOverride);
+    }
+  }, [selectedPreset]);
 
   // Fetch COG info when URL changes
   useEffect(() => {
@@ -146,6 +292,7 @@ const LoadCogPanel: React.FC<LoadCogPanelProps> = ({onTilesetAdded}) => {
   const onCogUrlChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setCogUrl(e.target.value);
     setError(null);
+    setSelectedPresetId('none'); // reset preset on new URL
   }, []);
 
   const onTitilerUrlChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,6 +302,10 @@ const LoadCogPanel: React.FC<LoadCogPanelProps> = ({onTilesetAdded}) => {
 
   const onRescaleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setRescale(e.target.value);
+  }, []);
+
+  const onPresetChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedPresetId(e.target.value);
   }, []);
 
   const onLoadCog = useCallback(() => {
@@ -167,17 +318,17 @@ const LoadCogPanel: React.FC<LoadCogPanelProps> = ({onTilesetAdded}) => {
       return;
     }
 
-    // Build tile URL template
-    const tileUrlTemplate = `${titilerBaseUrl}/cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png?url=${encodeURIComponent(cogUrl)}&rescale=${rescale}`;
+    // Build tile URL with preset params
+    const tileUrlTemplate = buildTileUrl(titilerBaseUrl, cogUrl, rescale, selectedPreset);
 
     // Extract filename from COG URL for the layer name
     const urlParts = cogUrl.split('/');
-    const filename = urlParts[urlParts.length - 1] || 'COG Layer';
-    const layerName = filename.replace(/\.[^.]+$/, '');
+    const rawFilename = urlParts[urlParts.length - 1] || 'COG Layer';
+    const filename = rawFilename.split('?')[0]; // strip query string
+    const layerName = `${filename.replace(/\.[^.]+$/, '')}${selectedPreset.id !== 'none' ? ` (${selectedPreset.label.replace(/^[^\s]+ /, '')})` : ''}`;
 
     // Create minimal STAC-like metadata for the raster tile layer
     const metadata = {
-      // STAC-like fields for compatibility with raster-tile-layer
       stac_version: '1.0.0',
       type: 'Feature',
       id: `cog-${Date.now()}`,
@@ -212,14 +363,14 @@ const LoadCogPanel: React.FC<LoadCogPanelProps> = ({onTilesetAdded}) => {
       tileUrlTemplate,
       cogUrl,
       rescale,
+      bandPreset: selectedPreset.id,
+      bandPresetLabel: selectedPreset.label,
       // COG info
       ...(cogInfo || {}),
-      // Mark as COG for potential special handling
       isCog: true,
       metadataUrl: `${titilerBaseUrl}/cog/info?url=${encodeURIComponent(cogUrl)}`
     };
 
-    // Call onTilesetAdded to add the dataset
     if (onTilesetAdded) {
       onTilesetAdded(
         {
@@ -230,9 +381,10 @@ const LoadCogPanel: React.FC<LoadCogPanelProps> = ({onTilesetAdded}) => {
         cogInfo || undefined
       );
     }
-  }, [cogUrl, titilerBaseUrl, rescale, cogUrlValid, titilerUrlValid, cogInfo, onTilesetAdded]);
+  }, [cogUrl, titilerBaseUrl, rescale, selectedPreset, cogUrlValid, titilerUrlValid, cogInfo, onTilesetAdded]);
 
   const canSubmit = cogUrlValid && titilerUrlValid && !loading;
+  const bandCount = cogInfo?.count ?? cogInfo?.band_metadata?.length ?? null;
 
   return (
     <div>
@@ -247,29 +399,53 @@ const LoadCogPanel: React.FC<LoadCogPanelProps> = ({onTilesetAdded}) => {
           type="text"
           placeholder="https://example.com/my-image.tif"
           value={cogUrl}
-          error={cogUrl && !cogUrlValid}
+          error={cogUrl && !cogUrlValid ? 'true' : undefined}
         />
         <ExampleUrl>
           Example: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/...
         </ExampleUrl>
 
-        <StyledInputLabel style={{marginTop: 16}}>TiTiler Base URL (optional)</StyledInputLabel>
+        {/* Band Preset Selector */}
+        <Divider />
+        <StyledInputLabel style={{marginTop: 0}}>
+          Band Preset
+          {bandCount !== null && (
+            <span style={{marginLeft: 8, fontWeight: 'normal', opacity: 0.7}}>
+              ({bandCount} band{bandCount !== 1 ? 's' : ''} detected)
+            </span>
+          )}
+        </StyledInputLabel>
+        <StyledSelect value={selectedPresetId} onChange={onPresetChange}>
+          {BAND_PRESETS.map(preset => (
+            <option key={preset.id} value={preset.id}>
+              {preset.label}
+            </option>
+          ))}
+        </StyledSelect>
+        <PresetDescription>{selectedPreset.description}</PresetDescription>
+
+        <Divider />
+
+        <StyledInputLabel>TiTiler Base URL</StyledInputLabel>
         <StyledInput
           onChange={onTitilerUrlChange}
           type="text"
           placeholder={DEFAULT_TITILER_BASE_URL}
           value={titilerBaseUrl}
-          error={titilerBaseUrl && !titilerUrlValid}
+          error={titilerBaseUrl && !titilerUrlValid ? 'true' : undefined}
         />
 
-        <StyledInputLabel style={{marginTop: 16}}>Rescale (optional)</StyledInputLabel>
+        <StyledInputLabel>Rescale</StyledInputLabel>
         <StyledInput
           onChange={onRescaleChange}
           type="text"
           placeholder={DEFAULT_RESCALE}
           value={rescale}
         />
-        <ExampleUrl>Format: min,max — adjusts pixel value range for visualization</ExampleUrl>
+        <ExampleUrl>
+          Format: min,max — adjusts pixel value range for visualization
+          {selectedPreset.id === 'ndvi' && ' (NDVI range is always −1 to 1)'}
+        </ExampleUrl>
 
         <StyledFromGroup>
           <Button
@@ -286,8 +462,8 @@ const LoadCogPanel: React.FC<LoadCogPanelProps> = ({onTilesetAdded}) => {
         {error && <StyledError>{error}</StyledError>}
         {cogInfo && !error && (
           <StyledSuccess>
-            COG validated: {cogInfo.width}x{cogInfo.height}px, zoom {cogInfo.minzoom}-
-            {cogInfo.maxzoom}
+            ✅ COG validated: {cogInfo.width}×{cogInfo.height}px, {bandCount} band
+            {bandCount !== 1 ? 's' : ''}, zoom {cogInfo.minzoom}–{cogInfo.maxzoom}
           </StyledSuccess>
         )}
       </InputForm>
