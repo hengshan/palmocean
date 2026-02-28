@@ -30,6 +30,7 @@ import {replacePanelHeader} from './factories/panel-header';
 import {replaceLayerList} from './factories/layer-list';
 import {setAoiGeometry, setAoiMode, clearAoi} from './palmview/raster-state';
 import BottomStatusBar from './palmview/components/BottomStatusBar';
+import MapConfigToolbar, {loadConfigFromUrl} from './components/map-config-toolbar';
 import {CLOUD_PROVIDERS_CONFIGURATION, DEFAULT_FEATURE_FLAGS} from './constants/default-settings';
 import {messages} from './constants/localization';
 
@@ -237,6 +238,9 @@ const App = props => {
 
     // PalmView: suppress default Add Data modal on startup
     dispatch(toggleModal(null));
+
+    // T5: Restore workspace from ?config=<id> share link
+    loadConfigFromUrl(dispatch);
 
     // delay zs to show the banner
     // if (!window.localStorage.getItem(BannerKey)) {
@@ -720,6 +724,8 @@ const App = props => {
                         </AutoSizer>
                         {/* T4 P0: Bottom Status Bar — coordinates, scale, CRS, zoom */}
                         <BottomStatusBar mapRef={mapboxRef} />
+                        {/* T5: Map Config — Save & Share toolbar */}
+                        <MapConfigToolbar />
                       </div>
                     </Panel>
 

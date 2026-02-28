@@ -164,6 +164,27 @@ export async function loadMapConfig(
   return request<MapConfigDetail>(`/api/v1/map-configs/${configId}`);
 }
 
+export interface ShareMapConfigBody {
+  visibility: 'org' | 'public_link';
+  expires_at?: string | null;
+}
+
+export interface ShareMapConfigResponse {
+  share_id: string;
+  token: string;
+  url: string;
+}
+
+export async function shareMapConfig(
+  configId: string,
+  body: ShareMapConfigBody
+): Promise<ShareMapConfigResponse> {
+  return request<ShareMapConfigResponse>(`/api/v1/map-configs/${configId}/share`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 // ── Health ───────────────────────────────────────────
 
 export async function healthCheck(): Promise<{ status: string; version: string }> {
