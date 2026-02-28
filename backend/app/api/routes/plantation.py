@@ -118,6 +118,40 @@ def create_plantation(body: PlantationCreate, db: Session = Depends(get_db)):
     return _plantation_response(p)
 
 
+# ── Bulk Create (seed bypass) ────────────────────────────────────────────────
+
+@router.post("/bulk", status_code=201)
+def bulk_create_plantations(body: list[PlantationCreate], db: Session = Depends(get_db)):
+    """Insert up to 1000 plantations in a single transaction. No rate-limit."""
+    if len(body) > 1000:
+        raise HTTPException(400, "Max 1000 records per bulk request")
+    records = []
+    for item in body:
+        p = PlantationModel(
+            id=str(uuid.uuid4()),
+            name=item.name,
+            description=item.description,
+            location=item.location,
+            boundary=item.boundary,
+            area_hectares=item.area_hectares,
+            tree_count=item.tree_count,
+            health_score=item.health_score,
+            owner_id=item.owner_id,
+        )
+        records.append(p)
+    db.bulk_save_objects(records)
+    db.commit()
+    return {"inserted": len(records)}
+
+
+@router.delete("", status_code=200)
+def delete_all_plantations(db: Session = Depends(get_db)):
+    """Delete all plantations (for re-seeding)."""
+    count = db.query(PlantationModel).delete()
+    db.commit()
+    return {"deleted": count}
+
+
 # ── Update ───────────────────────────────────────────────────────────────────
 
 @router.put("/{plantation_id}", response_model=PlantationResponse)
