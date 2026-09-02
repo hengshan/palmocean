@@ -13,7 +13,7 @@ services:
   # ── PostgreSQL + PostGIS ─────────────────────────────────────────────
   postgres:
     image: postgis/postgis:16-3.4
-    container_name: palmview-db
+    container_name: palmocean-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: palmview
@@ -22,7 +22,7 @@ services:
     ports:
       - "5434:5432"
     volumes:
-      - palmview_pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U palmview"]
       interval: 10s
@@ -32,7 +32,7 @@ services:
   # ── TimescaleDB (IoT / time-series data for PalmOcean) ──────────────
   timescaledb:
     image: timescale/timescaledb-ha:pg17
-    container_name: palmview-timescaledb
+    container_name: palmocean-timescaledb
     restart: unless-stopped
     environment:
       POSTGRES_DB: palmocean
@@ -41,7 +41,7 @@ services:
     ports:
       - "5435:5432"
     volumes:
-      - palmview_tsdb:/var/lib/postgresql/data
+      - tsdb:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U palmocean"]
       interval: 10s
@@ -51,7 +51,7 @@ services:
   # ── MinIO (S3-compatible object storage) ────────────────────────────
   minio:
     image: minio/minio
-    container_name: palmview-minio
+    container_name: palmocean-minio
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: palmview
@@ -60,7 +60,7 @@ services:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - palmview_minio:/data
+      - minio_data:/data
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -71,7 +71,7 @@ services:
   # ── MinIO bucket initializer (runs once) ────────────────────────────
   minio-init:
     image: minio/mc
-    container_name: palmview-minio-init
+    container_name: palmocean-minio-init
     depends_on:
       minio:
         condition: service_healthy
@@ -90,7 +90,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: palmview-api
+    container_name: palmocean-api
     restart: unless-stopped
     depends_on:
       postgres:
@@ -112,7 +112,7 @@ services:
       GEO_INFERENCE_API_URL: http://host.docker.internal:8001
     volumes:
       - ./backend:/app
-      - palmview_uploads:/app/storage/uploads
+      - uploads:/app/storage/uploads
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: >
@@ -122,7 +122,7 @@ services:
       "
 
 volumes:
-  palmview_pgdata:
-  palmview_tsdb:
-  palmview_minio:
-  palmview_uploads:
+  pgdata:
+  tsdb:
+  minio_data:
+  uploads:
